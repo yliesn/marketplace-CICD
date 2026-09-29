@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>Mini Marketplace</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <span class="brand-logo" aria-hidden="true">🛒</span>
+        <span>Mini Marketplace</span>
+      </a>
+      <a class="btn btn-primary btn-sm only-mobile" href="#publish">+ Publier</a>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="listing" aria-labelledby="listing-title">
+      <div class="listing-head">
+        <div>
+          <h1 id="listing-title">Articles à vendre</h1>
+          <p id="count" class="muted">Chargement…</p>
+        </div>
+        <div class="toolbar">
+          <label class="visually-hidden" for="search">Rechercher</label>
+          <input id="search" class="input search" type="search" placeholder="Rechercher un article…" autocomplete="off">
+          <label class="visually-hidden" for="sort">Trier</label>
+          <select id="sort" class="input">
+            <option value="recent">Plus récents</option>
+            <option value="price-asc">Prix croissant</option>
+            <option value="price-desc">Prix décroissant</option>
+          </select>
+        </div>
+      </div>
+
+      <ul id="articles" class="grid" aria-live="polite"></ul>
+
+      <div id="state" class="state" hidden>
+        <p id="state-icon" class="state-icon" aria-hidden="true"></p>
+        <p id="state-title" class="state-title"></p>
+        <p id="state-text" class="muted"></p>
+        <button id="retry" class="btn btn-ghost" type="button" hidden>Réessayer</button>
+      </div>
+    </section>
+
+    <aside id="publish" class="panel" aria-labelledby="publish-title">
+      <h2 id="publish-title">Publier un article</h2>
+      <p class="muted small">Il sera visible immédiatement par tout le monde.</p>
+
+      <form id="article-form" novalidate>
+        <div class="field">
+          <label for="title">Titre</label>
+          <input id="title" name="title" class="input" type="text" maxlength="255" placeholder="Ex. Clavier mécanique" required>
+          <p class="field-error" data-for="title"></p>
+        </div>
+
+        <div class="field">
+          <div class="label-row">
+            <label for="description">Description</label>
+            <span id="desc-count" class="muted small">0 / 500</span>
+          </div>
+          <textarea id="description" name="description" class="input" rows="4" maxlength="500" placeholder="État, caractéristiques, remise en main propre…"></textarea>
+        </div>
+
+        <div class="field">
+          <label for="price">Prix</label>
+          <div class="input-suffix">
+            <input id="price" name="price" class="input" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00" required>
+            <span aria-hidden="true">€</span>
+          </div>
+          <p class="field-error" data-for="price"></p>
+        </div>
+
+        <p id="form-error" class="alert" role="alert" hidden></p>
+
+        <button id="submit" class="btn btn-primary btn-block" type="submit">Publier l'article</button>
+      </form>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

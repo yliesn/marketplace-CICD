@@ -1,0 +1,7 @@
+node_modules/
+coverage/
+npm-debug.log*
+.env
+.env.*
+!.env.example
+kubernetes/secret.yaml
