@@ -21,3 +21,7 @@ data:
       data         BYTEA       NOT NULL,
       updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    INSERT INTO articles (title, description, price) VALUES
+      ('Clavier mécanique', 'Clavier en très bon état', 45.00),
+      ('Écran 24 pouces', 'Écran Full HD', 90.00);
