@@ -5,21 +5,67 @@ on:
     workflows: ["CI"]
     types:
       - completed
+    branches:
+      - main
 
 jobs:
   deploy:
-    name: Deploy to VPS
+    name: Deploy to K3s
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: self-hosted
 
     steps:
-      - name: Test SSH connection
-        uses: appleboy/ssh-action@v1.2.2
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Copy Kubernetes manifests to VPS
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          source: "kubernetes/*"
+          target: "/tmp/marketplace-kubernetes"
+
+      - name: Deploy to K3s
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: IMAGE_TAG
           script: |
-            echo "Connexion SSH réussie !"
-            hostname
-            whoami
+            set -e
+
+            echo "Déploiement de l'image : $IMAGE_TAG"
+
+            sudo k3s kubectl apply \
+              -f /tmp/marketplace-kubernetes/namespace.yaml
+
+            sudo k3s kubectl apply \
+              -f /tmp/marketplace-kubernetes/postgres-configmap.yaml \
+              -f /tmp/marketplace-kubernetes/postgres-pvc.yaml \
+              -f /tmp/marketplace-kubernetes/postgres-deployment.yaml \
+              -f /tmp/marketplace-kubernetes/postgres-service.yaml
+
+            sudo k3s kubectl apply \
+              -f /tmp/marketplace-kubernetes/app-deployment.yaml \
+              -f /tmp/marketplace-kubernetes/app-service.yaml \
+              -f /tmp/marketplace-kubernetes/app-ingress.yaml
+
+            sudo k3s kubectl set image deployment/marketplace \
+              marketplace=ghcr.io/yliesn/marketplace:$IMAGE_TAG \
+              -n marketplace
+
+            sudo k3s kubectl rollout status \
+              deployment/marketplace \
+              -n marketplace \
+              --timeout=180s
+
+            echo "Déploiement terminé !"
+
+            sudo k3s kubectl get pods -n marketplace
