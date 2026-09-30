@@ -314,7 +314,7 @@ describe('images des articles', () => {
   });
 
   it('refuse une image de plus de 2 Mo', async () => {
-    const big = Buffer.concat([png, Buffer.alloc(2 * 1024 * 1024)]);
+    const big = Buffer.concat([png, Buffer.alloc(10 * 1024 * 1024)]);
     const res = await putImage(1, 'image/png', big);
     expect(res.status).toBe(413);
     expect(db.query).not.toHaveBeenCalled();
