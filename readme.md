@@ -426,7 +426,7 @@ L'objectif suivant est de publier l'image dans un registry.
 Exemple avec GitHub Container Registry :
 
 ```text
-ghcr.io/<USERNAME>/marketplace
+ghcr.io/yliesn/marketplace
 ```
 
 Le pipeline devra :
@@ -485,7 +485,7 @@ Le Deployment doit utiliser l'image Docker publiée dans le registry.
 Exemple :
 
 ```text
-ghcr.io/<USERNAME>/marketplace:1.0.0
+ghcr.io/yliesn/marketplace:1.0.0
 ```
 
 ---
@@ -648,7 +648,7 @@ Exemple :
 
 ```bash
 kubectl set image deployment/marketplace \
-  marketplace=ghcr.io/<USERNAME>/marketplace:<version>
+  marketplace=ghcr.io/yliesn/marketplace:<version>
 ```
 
 Puis vérifier le déploiement :

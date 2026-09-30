@@ -17,8 +17,8 @@ spec:
     spec:
       containers:
         - name: marketplace
-          # Remplacer <USERNAME> par le compte GitHub propriétaire de l'image
-          image: ghcr.io/<USERNAME>/marketplace:1.0.0
+          # Remplacer yliesn par le compte GitHub propriétaire de l'image
+          image: ghcr.io/yliesn/marketplace:1.0.0
           ports:
             - containerPort: 3000
           env:

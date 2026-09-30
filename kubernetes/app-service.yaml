@@ -4,10 +4,9 @@ metadata:
   name: marketplace
   namespace: marketplace
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: marketplace
   ports:
     - port: 3000
       targetPort: 3000
-      nodePort: 30080
