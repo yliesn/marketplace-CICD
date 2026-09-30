@@ -74,9 +74,9 @@ L'application doit être conteneurisée et pouvoir être déployée sur Kubernet
 
 * Node.js
 * Express
-* HTML
+* Vue 3
+* Vite
 * CSS
-* JavaScript
 
 ## Base de données
 
@@ -179,17 +179,26 @@ marketplace/
 │   ├── server.js
 │   ├── db.js
 │   │
-│   ├── routes/
-│   │   └── articles.js
+│   └── routes/
+│       └── articles.js
+│
+├── client/
+│   ├── index.html
 │   │
-│   └── public/
-│       ├── index.html
-│       ├── app.js
-│       └── style.css
+│   └── src/
+│       ├── main.js
+│       ├── App.vue
+│       ├── format.js
+│       ├── style.css
+│       │
+│       └── components/
+│           ├── ArticleCard.vue
+│           └── ArticleForm.vue
 │
 ├── tests/
 │   └── articles.test.js
 │
+├── vite.config.mjs
 ├── Dockerfile
 ├── docker-compose.yml
 ├── init.sql
