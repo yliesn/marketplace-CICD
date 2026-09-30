@@ -37,6 +37,23 @@
         </div>
       </div>
 
+      <div class="filters" role="group" aria-label="Filtrer par prix">
+        <span class="muted small">Prix</span>
+        <label class="visually-hidden" for="min-price">Prix minimum</label>
+        <div class="input-suffix">
+          <input id="min-price" class="input" type="number" min="0" step="1" inputmode="decimal" placeholder="Min">
+          <span aria-hidden="true">€</span>
+        </div>
+        <span class="muted" aria-hidden="true">–</span>
+        <label class="visually-hidden" for="max-price">Prix maximum</label>
+        <div class="input-suffix">
+          <input id="max-price" class="input" type="number" min="0" step="1" inputmode="decimal" placeholder="Max">
+          <span aria-hidden="true">€</span>
+        </div>
+        <button id="reset-filters" class="btn btn-ghost btn-sm" type="button" hidden>Réinitialiser</button>
+      </div>
+      <p id="filter-error" class="field-error" role="alert"></p>
+
       <ul id="articles" class="grid" aria-live="polite"></ul>
 
       <div id="state" class="state" hidden>
@@ -45,11 +62,17 @@
         <p id="state-text" class="muted"></p>
         <button id="retry" class="btn btn-ghost" type="button" hidden>Réessayer</button>
       </div>
+
+      <nav id="pagination" class="pagination" aria-label="Pagination" hidden>
+        <button id="prev-page" class="btn btn-ghost btn-sm" type="button">← Précédent</button>
+        <span id="page-info" class="muted small"></span>
+        <button id="next-page" class="btn btn-ghost btn-sm" type="button">Suivant →</button>
+      </nav>
     </section>
 
     <aside id="publish" class="panel" aria-labelledby="publish-title">
       <h2 id="publish-title">Publier un article</h2>
-      <p class="muted small">Il sera visible immédiatement par tout le monde.</p>
+      <p id="publish-hint" class="muted small">Il sera visible immédiatement par tout le monde.</p>
 
       <form id="article-form" novalidate>
         <div class="field">
@@ -78,6 +101,7 @@
         <p id="form-error" class="alert" role="alert" hidden></p>
 
         <button id="submit" class="btn btn-primary btn-block" type="submit">Publier l'article</button>
+        <button id="cancel-edit" class="btn btn-ghost btn-block" type="button" hidden>Annuler</button>
       </form>
     </aside>
   </main>
