@@ -28,6 +28,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           source: "kubernetes/*"
           target: "/tmp/marketplace-kubernetes"
+          strip_components: 1
 
       - name: Deploy to K3s
         uses: appleboy/ssh-action@v1.2.2
