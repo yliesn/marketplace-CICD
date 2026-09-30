@@ -108,9 +108,10 @@ L'application doit être conteneurisée et pouvoir être déployée sur Kubernet
 
 L'application doit permettre de :
 
-* afficher tous les articles
+* afficher tous les articles (recherche, filtre de prix, tri, pagination)
 * afficher un article
 * publier un article
+* modifier un article
 * supprimer un article
 
 Un article possède :
@@ -306,6 +307,29 @@ Réponse :
 
 ```http
 GET /api/articles
+GET /api/articles?q=clavier&min_price=10&max_price=100&sort=price-asc&page=1&limit=20
+```
+
+Paramètres (tous optionnels) :
+
+| Paramètre   | Description                                             | Défaut   |
+|-------------|---------------------------------------------------------|----------|
+| `q`         | recherche dans le titre et la description (insensible à la casse) | —        |
+| `min_price` | prix minimum (inclus)                                   | —        |
+| `max_price` | prix maximum (inclus)                                   | —        |
+| `sort`      | `recent`, `price-asc` ou `price-desc`                   | `recent` |
+| `page`      | numéro de page (≥ 1)                                    | `1`      |
+| `limit`     | articles par page (1 à 100)                             | `20`     |
+
+Un paramètre invalide renvoie `400` avec la liste des erreurs.
+
+La réponse reste un tableau d'articles ; les informations de pagination sont dans les en-têtes :
+
+```http
+X-Total-Count: 29
+X-Page: 1
+X-Per-Page: 20
+X-Total-Pages: 2
 ```
 
 Exemple :
@@ -361,6 +385,26 @@ Réponse :
 
 ---
 
+## Modifier un article
+
+```http
+PUT /api/articles/3
+```
+
+Body (mêmes règles de validation que la création) :
+
+```json
+{
+  "title": "Souris sans fil",
+  "description": "Souris Logitech, pile neuve",
+  "price": 20
+}
+```
+
+Réponse : l'article modifié (`200`), `404` s'il n'existe pas, `400` si les données sont invalides.
+
+---
+
 ## Supprimer un article
 
 ```http
@@ -390,6 +434,8 @@ Les tests doivent notamment vérifier :
 * que les articles peuvent être récupérés
 * qu'un article peut être créé
 * qu'un article invalide est refusé
+* qu'un article peut être modifié
+* que la recherche, les filtres de prix et la pagination fonctionnent
 
 ---
 
@@ -823,10 +869,6 @@ Une fois le projet fonctionnel, possibilité d'ajouter :
 * utilisateurs
 * catégories
 * images des articles
-* modification d'un article
-* recherche
-* pagination
-* prix maximum/minimum
 * statut vendu/disponible
 * tests d'intégration
 * tests end-to-end
