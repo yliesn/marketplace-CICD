@@ -15,9 +15,10 @@ spec:
       labels:
         app: marketplace
     spec:
+      imagePullSecrets:
+        - name: ghcr-secret
       containers:
         - name: marketplace
-          # Remplacer yliesn par le compte GitHub propriétaire de l'image
           image: ghcr.io/yliesn/marketplace:1.0.0
           ports:
             - containerPort: 3000
