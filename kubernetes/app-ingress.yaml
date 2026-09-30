@@ -3,9 +3,13 @@ kind: Ingress
 metadata:
   name: marketplace
   namespace: marketplace
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: "le"
 spec:
+  ingressClassName: traefik
   rules:
-    - host: develop.nejara.fr
+    - host: marketplace.nejara.fr
       http:
         paths:
           - path: /
@@ -15,3 +19,6 @@ spec:
                 name: marketplace
                 port:
                   number: 3000
+  tls:
+    - hosts:
+        - marketplace.nejara.fr
