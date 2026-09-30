@@ -226,6 +226,65 @@ describe('PUT /api/articles/:id', () => {
   });
 });
 
+describe('images des articles', () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
+
+  it('enregistre une image', async () => {
+    db.query.mockResolvedValue({ rows: [{ image_updated_at: '2026-09-30T10:00:00.000Z' }] });
+    const res = await request(app).put('/api/articles/1/image').set('Content-Type', 'image/png').send(png);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ image_updated_at: '2026-09-30T10:00:00.000Z' });
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO article_images'), [1, 'image/png', png]);
+  });
+
+  it('refuse un type de fichier non pris en charge', async () => {
+    const res = await request(app).put('/api/articles/1/image').set('Content-Type', 'application/pdf').send(png);
+    expect(res.status).toBe(415);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('refuse un contenu qui ne correspond pas au type annoncé', async () => {
+    const res = await request(app).put('/api/articles/1/image').set('Content-Type', 'image/jpeg').send(png);
+    expect(res.status).toBe(400);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('refuse une image de plus de 2 Mo', async () => {
+    const big = Buffer.concat([png, Buffer.alloc(2 * 1024 * 1024)]);
+    const res = await request(app).put('/api/articles/1/image').set('Content-Type', 'image/png').send(big);
+    expect(res.status).toBe(413);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it("retourne 404 si l'article n'existe pas", async () => {
+    db.query.mockRejectedValue(Object.assign(new Error('foreign key violation'), { code: '23503' }));
+    const res = await request(app).put('/api/articles/999/image').set('Content-Type', 'image/png').send(png);
+    expect(res.status).toBe(404);
+  });
+
+  it("sert l'image d'un article", async () => {
+    db.query.mockResolvedValue({ rows: [{ content_type: 'image/png', data: png }] });
+    const res = await request(app).get('/api/articles/1/image');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe('image/png');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(Buffer.compare(res.body, png)).toBe(0);
+  });
+
+  it("retourne 404 si l'article n'a pas d'image", async () => {
+    db.query.mockResolvedValue({ rows: [] });
+    const res = await request(app).get('/api/articles/1/image');
+    expect(res.status).toBe(404);
+  });
+
+  it("supprime l'image d'un article", async () => {
+    db.query.mockResolvedValue({ rowCount: 1 });
+    const res = await request(app).delete('/api/articles/1/image');
+    expect(res.status).toBe(204);
+  });
+});
+
 describe('DELETE /api/articles/:id', () => {
   it('supprime un article', async () => {
     db.query.mockResolvedValue({ rowCount: 1 });

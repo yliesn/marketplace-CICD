@@ -47,6 +47,21 @@ const SORTS = {
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
+const imageBody = express.raw({ type: IMAGE_TYPES, limit: MAX_IMAGE_SIZE });
+
+// Vérifie que le contenu correspond bien au type annoncé (signature du fichier).
+function matchesImageType(buffer, type) {
+  const startsWith = (bytes, offset = 0) => bytes.every((byte, i) => buffer[offset + i] === byte);
+  switch (type) {
+    case 'image/jpeg': return startsWith([0xff, 0xd8, 0xff]);
+    case 'image/png': return startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    case 'image/webp': return startsWith([0x52, 0x49, 0x46, 0x46]) && startsWith([0x57, 0x45, 0x42, 0x50], 8);
+    default: return false;
+  }
+}
+
 function parseListQuery(query) {
   const errors = [];
   const filters = {};
@@ -128,8 +143,10 @@ router.get('/', async (req, res, next) => {
   params.push(filters.limit, (filters.page - 1) * filters.limit);
 
   const sql = `
-    SELECT id, title, description, price, created_at, COUNT(*) OVER() AS total_count
+    SELECT id, title, description, price, created_at, i.updated_at AS image_updated_at,
+           COUNT(*) OVER() AS total_count
     FROM articles
+    LEFT JOIN article_images i ON i.article_id = articles.id
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY ${SORTS[filters.sort]}
     LIMIT $${params.length - 1} OFFSET $${params.length}`;
@@ -164,11 +181,77 @@ router.get('/:id', async (req, res, next) => {
 
   try {
     const { rows } = await db.query(
-      'SELECT id, title, description, price, created_at FROM articles WHERE id = $1',
+      `SELECT id, title, description, price, created_at, i.updated_at AS image_updated_at
+       FROM articles
+       LEFT JOIN article_images i ON i.article_id = articles.id
+       WHERE id = $1`,
       [id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Article introuvable' });
     res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/:id/image', async (req, res, next) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'id invalide' });
+
+  try {
+    const { rows } = await db.query(
+      'SELECT content_type, data FROM article_images WHERE article_id = $1',
+      [id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Image introuvable' });
+    res.set({
+      'Content-Type': rows[0].content_type,
+      // L'interface ajoute ?v=<date de modification> : l'URL change quand l'image change.
+      'Cache-Control': req.query.v ? 'public, max-age=31536000, immutable' : 'no-cache',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    res.send(rows[0].data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/:id/image', imageBody, async (req, res, next) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'id invalide' });
+
+  const type = req.is(IMAGE_TYPES);
+  if (!type || !Buffer.isBuffer(req.body) || req.body.length === 0) {
+    return res.status(415).json({ error: 'Image attendue (JPEG, PNG ou WebP)' });
+  }
+  if (!matchesImageType(req.body, type)) {
+    return res.status(400).json({ error: `Le fichier n'est pas une image ${type} valide` });
+  }
+
+  try {
+    const { rows } = await db.query(
+      `INSERT INTO article_images (article_id, content_type, data) VALUES ($1, $2, $3)
+       ON CONFLICT (article_id) DO UPDATE
+         SET content_type = EXCLUDED.content_type, data = EXCLUDED.data, updated_at = NOW()
+       RETURNING updated_at AS image_updated_at`,
+      [id, type, req.body]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    // Violation de clé étrangère : l'article n'existe pas.
+    if (err.code === '23503') return res.status(404).json({ error: 'Article introuvable' });
+    next(err);
+  }
+});
+
+router.delete('/:id/image', async (req, res, next) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'id invalide' });
+
+  try {
+    const { rowCount } = await db.query('DELETE FROM article_images WHERE article_id = $1', [id]);
+    if (rowCount === 0) return res.status(404).json({ error: 'Image introuvable' });
+    res.status(204).end();
   } catch (err) {
     next(err);
   }

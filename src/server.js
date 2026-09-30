@@ -22,6 +22,9 @@ app.use((err, req, res, next) => {
   if (err.type === 'entity.parse.failed') {
     return res.status(400).json({ error: 'JSON invalide' });
   }
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Contenu trop volumineux' });
+  }
   console.error(err);
   res.status(500).json({ error: 'Erreur interne du serveur' });
 });

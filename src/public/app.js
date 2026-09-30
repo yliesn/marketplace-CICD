@@ -26,9 +26,24 @@ const submit = document.getElementById('submit');
 const cancelEdit = document.getElementById('cancel-edit');
 const formError = document.getElementById('form-error');
 const descCount = document.getElementById('desc-count');
+const imagePreview = document.getElementById('image-preview');
+const imagePreviewImg = document.getElementById('image-preview-img');
+const imageRemove = document.getElementById('image-remove');
 const toast = document.getElementById('toast');
+const confirmDialog = document.getElementById('confirm');
+const confirmText = document.getElementById('confirm-text');
 
 const PER_PAGE = 12;
+const NEW_BADGE_MS = 24 * 60 * 60 * 1000;
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
+
+const svg = (paths) =>
+  `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+const ICONS = {
+  edit: svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>'),
+  trash: svg('<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/>'),
+};
 
 const priceFormat = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
 const relativeFormat = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' });
@@ -40,6 +55,8 @@ let totalPages = 1;
 let total = 0;
 let editing = null; // article en cours de modification
 let requestId = 0; // ignore les réponses obsolètes
+let removeImage = false; // photo existante à supprimer à l'enregistrement
+let previewUrl = null;
 
 // ---------- Helpers ----------
 
@@ -71,9 +88,30 @@ function debounce(fn, delay) {
   };
 }
 
+// Teinte stable dérivée du titre, pour différencier les vignettes.
+function hueFor(text) {
+  let hash = 0;
+  for (const char of text) hash = (hash * 31 + char.codePointAt(0)) % 360;
+  return hash;
+}
+
+function imageUrl(article) {
+  return `/api/articles/${article.id}/image?v=${Date.parse(article.image_updated_at)}`;
+}
+
+function confirmDelete(article) {
+  confirmText.textContent = `« ${article.title} » sera définitivement supprimé.`;
+  confirmDialog.returnValue = 'cancel';
+  confirmDialog.showModal();
+  return new Promise((resolve) => {
+    confirmDialog.addEventListener('close', () => resolve(confirmDialog.returnValue === 'confirm'), { once: true });
+  });
+}
+
 let toastTimer;
-function showToast(message) {
+function showToast(message, type = 'success') {
   toast.textContent = message;
+  toast.dataset.type = type;
   toast.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { toast.hidden = true; }, 3000);
@@ -93,13 +131,16 @@ function hasFilters() {
 
 // ---------- Rendering ----------
 
-function renderSkeletons(n = 4) {
+function renderSkeletons(n = 6) {
   state.hidden = true;
   pagination.hidden = true;
   list.replaceChildren(...Array.from({ length: n }, () => {
     const li = el('li', 'card skeleton');
     li.setAttribute('aria-hidden', 'true');
-    li.append(el('div', 'sk sk-thumb'), el('div', 'sk sk-line'), el('div', 'sk sk-line short'));
+    li.append(
+      el('div', 'sk sk-thumb'), el('div', 'sk sk-line'),
+      el('div', 'sk sk-line'), el('div', 'sk sk-line short'),
+    );
     return li;
   }));
 }
@@ -110,8 +151,22 @@ function renderCard(article) {
   if (editing && editing.id === article.id) li.classList.add('is-editing');
 
   const initial = (article.title.trim()[0] || '?').toUpperCase();
-  const thumb = el('div', 'card-thumb', initial);
-  thumb.setAttribute('aria-hidden', 'true');
+  const thumb = el('div', 'card-thumb');
+  thumb.style.setProperty('--hue', hueFor(article.title));
+  if (article.image_updated_at) {
+    const img = el('img');
+    img.src = imageUrl(article);
+    img.alt = `Photo de « ${article.title} »`;
+    img.loading = 'lazy';
+    img.addEventListener('error', () => img.replaceWith(initial));
+    thumb.append(img);
+  } else {
+    thumb.textContent = initial;
+    thumb.setAttribute('aria-hidden', 'true');
+  }
+  if (Date.now() - new Date(article.created_at) < NEW_BADGE_MS) {
+    thumb.append(el('span', 'badge', 'Nouveau'));
+  }
 
   const title = el('h3', 'card-title', article.title);
   const desc = el('p', 'card-desc', article.description || '');
@@ -125,13 +180,15 @@ function renderCard(article) {
 
   const actions = el('div', 'card-actions');
 
-  const edit = el('button', 'card-action', '✎');
+  const edit = el('button', 'card-action');
+  edit.innerHTML = ICONS.edit;
   edit.type = 'button';
   edit.title = 'Modifier';
   edit.setAttribute('aria-label', `Modifier « ${article.title} »`);
   edit.addEventListener('click', () => startEdit(article));
 
-  const remove = el('button', 'card-action card-delete', '✕');
+  const remove = el('button', 'card-action card-delete');
+  remove.innerHTML = ICONS.trash;
   remove.type = 'button';
   remove.title = 'Supprimer';
   remove.setAttribute('aria-label', `Supprimer « ${article.title} »`);
@@ -230,7 +287,7 @@ function reloadFromFirstPage() {
 }
 
 async function deleteArticle(article, card) {
-  if (!confirm(`Supprimer « ${article.title} » ?`)) return;
+  if (!(await confirmDelete(article))) return;
 
   card.classList.add('is-removing');
   try {
@@ -241,7 +298,7 @@ async function deleteArticle(article, card) {
     await loadArticles({ skeleton: false });
   } catch {
     card.classList.remove('is-removing');
-    showToast('La suppression a échoué');
+    showToast('La suppression a échoué', 'error');
   }
 }
 
@@ -257,7 +314,46 @@ function setFieldError(name, message) {
 function clearFormErrors() {
   setFieldError('title', '');
   setFieldError('price', '');
+  setFieldError('image', '');
   formError.hidden = true;
+}
+
+// Aperçu : le fichier choisi, sinon la photo actuelle de l'article en cours de modification.
+function refreshPreview() {
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = null;
+
+  const file = form.image.files[0];
+  if (file) {
+    previewUrl = URL.createObjectURL(file);
+    imagePreviewImg.src = previewUrl;
+  } else if (editing?.image_updated_at && !removeImage) {
+    imagePreviewImg.src = imageUrl(editing);
+  } else {
+    imagePreviewImg.removeAttribute('src');
+  }
+  imagePreview.hidden = !imagePreviewImg.hasAttribute('src');
+}
+
+function resetImageField() {
+  form.image.value = '';
+  removeImage = false;
+  setFieldError('image', '');
+  refreshPreview();
+}
+
+// Envoie ou supprime la photo une fois l'article enregistré. Retourne false en cas d'échec.
+async function saveImage(id) {
+  const file = form.image.files[0];
+  if (!file && !removeImage) return true;
+  try {
+    const res = await fetch(`/api/articles/${id}/image`, file
+      ? { method: 'PUT', headers: { 'Content-Type': file.type }, body: file }
+      : { method: 'DELETE' });
+    return res.ok || (!file && res.status === 404);
+  } catch {
+    return false;
+  }
 }
 
 function updateDescCount() {
@@ -271,6 +367,7 @@ function startEdit(article) {
   form.description.value = article.description || '';
   form.price.value = Number(article.price);
   updateDescCount();
+  resetImageField();
 
   panel.classList.add('is-editing');
   panelTitle.textContent = "Modifier l'article";
@@ -290,6 +387,7 @@ function stopEdit() {
   form.reset();
   clearFormErrors();
   updateDescCount();
+  resetImageField();
 
   panel.classList.remove('is-editing');
   panelTitle.textContent = 'Publier un article';
@@ -353,14 +451,20 @@ form.addEventListener('submit', async (event) => {
       throw new Error((data.errors || [data.error || 'Erreur lors de l\'enregistrement']).join(', '));
     }
 
+    const imageSaved = await saveImage(data.id);
+    const notify = (message) => (imageSaved
+      ? showToast(message)
+      : showToast("Article enregistré, mais la photo n'a pas pu être envoyée", 'error'));
+
     if (isEdit) {
       stopEdit();
-      showToast('Article modifié ✓');
+      notify('Article modifié');
       await loadArticles({ skeleton: false });
     } else {
       form.reset();
       updateDescCount();
-      showToast('Article publié ✓');
+      resetImageField();
+      notify('Article publié');
       // On revient sur la vue « plus récents » sans filtre pour voir le nouvel article.
       search.value = '';
       minPrice.value = '';
@@ -382,12 +486,33 @@ form.addEventListener('submit', async (event) => {
 
 cancelEdit.addEventListener('click', stopEdit);
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && editing) stopEdit();
+  if (event.key === 'Escape' && editing && !confirmDialog.open) stopEdit();
 });
 
 form.title.addEventListener('input', () => setFieldError('title', ''));
 form.price.addEventListener('input', () => setFieldError('price', ''));
 form.description.addEventListener('input', updateDescCount);
+
+form.image.addEventListener('change', () => {
+  const file = form.image.files[0];
+  let message = '';
+  if (file && !IMAGE_TYPES.includes(file.type)) {
+    message = 'Formats acceptés : JPEG, PNG ou WebP.';
+  } else if (file && file.size > MAX_IMAGE_SIZE) {
+    message = 'La photo ne doit pas dépasser 2 Mo.';
+  }
+  if (message) form.image.value = '';
+  setFieldError('image', message);
+  refreshPreview();
+});
+
+imageRemove.addEventListener('click', () => {
+  // Un fichier choisi : on l'annule. Sinon, on retire la photo déjà enregistrée.
+  if (form.image.files[0]) form.image.value = '';
+  else removeImage = true;
+  setFieldError('image', '');
+  refreshPreview();
+});
 
 // ---------- Filtres & pagination ----------
 

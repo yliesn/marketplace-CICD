@@ -413,6 +413,26 @@ DELETE /api/articles/3
 
 ---
 
+## Photo d'un article
+
+```http
+PUT /api/articles/3/image
+Content-Type: image/png
+```
+
+Body : le fichier brut (JPEG, PNG ou WebP, 2 Mo max). Remplace la photo existante.
+
+Réponse : `200` avec `image_updated_at`, `404` si l'article n'existe pas, `415` si le type n'est pas pris en charge, `413` si le fichier est trop volumineux.
+
+```http
+GET /api/articles/3/image
+DELETE /api/articles/3/image
+```
+
+Les articles renvoyés par `GET /api/articles` contiennent `image_updated_at` (`null` sans photo).
+
+---
+
 # 🧪 Tests
 
 Installer les dépendances :
