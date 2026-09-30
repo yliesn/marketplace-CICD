@@ -64,7 +64,7 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const imageBody = express.raw({ type: IMAGE_TYPES, limit: MAX_IMAGE_SIZE });
 
 // Vérifie que le contenu correspond bien au type annoncé (signature du fichier).

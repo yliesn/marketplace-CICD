@@ -4,7 +4,7 @@ import { imageUrl } from '../format';
 import Icon from './Icon.vue';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 
 const props = defineProps({
   // Article en cours de modification, ou null pour une création.
