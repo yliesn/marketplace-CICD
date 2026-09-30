@@ -5,8 +5,21 @@ jest.mock('../src/db', () => ({
   close: jest.fn(),
 }));
 
+jest.mock('../src/sessions', () => ({
+  SESSION_TTL_MS: 1000,
+  create: jest.fn(),
+  findUser: jest.fn(),
+  destroy: jest.fn(),
+  purgeExpired: jest.fn(),
+}));
+
 const db = require('../src/db');
+const sessions = require('../src/sessions');
 const app = require('../src/server');
+
+const COOKIE = 'sid=jeton-de-test';
+const user = { id: 7, email: 'vendeur@example.com', role: 'user' };
+const owned = { rows: [{ user_id: user.id }] }; // réponse de la vérification du propriétaire
 
 const sample = {
   id: 1,
@@ -18,6 +31,7 @@ const sample = {
 
 beforeEach(() => {
   db.query.mockReset();
+  sessions.findUser.mockReset().mockResolvedValue(user);
 });
 
 describe('GET /health', () => {
@@ -154,14 +168,28 @@ describe('POST /api/articles', () => {
 
     const res = await request(app)
       .post('/api/articles')
+      .set('Cookie', COOKIE)
       .send({ title: '  Souris sans fil ', description: 'Souris Logitech', price: 25 });
 
     expect(res.status).toBe(201);
     expect(res.body).toEqual(created);
     expect(db.query).toHaveBeenCalledWith(
       expect.stringContaining('INSERT'),
-      ['Souris sans fil', 'Souris Logitech', 25]
+      ['Souris sans fil', 'Souris Logitech', 25, user.id]
     );
+  });
+
+  it('refuse un visiteur non connecté', async () => {
+    const res = await request(app).post('/api/articles').send({ title: 'Objet', price: 10 });
+    expect(res.status).toBe(401);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('refuse une session expirée ou inconnue', async () => {
+    sessions.findUser.mockResolvedValue(null);
+    const res = await request(app).post('/api/articles').set('Cookie', COOKIE).send({ title: 'Objet', price: 10 });
+    expect(res.status).toBe(401);
+    expect(db.query).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -171,7 +199,7 @@ describe('POST /api/articles', () => {
     ['prix négatif', { title: 'Objet', price: -5 }],
     ['prix non numérique', { title: 'Objet', price: 'abc' }],
   ])('refuse un article invalide (%s)', async (_, body) => {
-    const res = await request(app).post('/api/articles').send(body);
+    const res = await request(app).post('/api/articles').set('Cookie', COOKIE).send(body);
     expect(res.status).toBe(400);
     expect(res.body.errors.length).toBeGreaterThan(0);
     expect(db.query).not.toHaveBeenCalled();
@@ -189,10 +217,11 @@ describe('POST /api/articles', () => {
 describe('PUT /api/articles/:id', () => {
   it('modifie un article', async () => {
     const updated = { ...sample, title: 'Clavier RGB', price: '39.90' };
-    db.query.mockResolvedValue({ rows: [updated] });
+    db.query.mockResolvedValueOnce(owned).mockResolvedValueOnce({ rows: [updated] });
 
     const res = await request(app)
       .put('/api/articles/1')
+      .set('Cookie', COOKIE)
       .send({ title: ' Clavier RGB ', description: 'Clavier en très bon état', price: '39.90' });
 
     expect(res.status).toBe(200);
@@ -205,14 +234,40 @@ describe('PUT /api/articles/:id', () => {
 
   it("retourne 404 si l'article n'existe pas", async () => {
     db.query.mockResolvedValue({ rows: [] });
-    const res = await request(app).put('/api/articles/999').send({ title: 'Objet', price: 10 });
+    const res = await request(app).put('/api/articles/999').set('Cookie', COOKIE).send({ title: 'Objet', price: 10 });
     expect(res.status).toBe(404);
   });
 
   it('retourne 400 pour un id invalide', async () => {
-    const res = await request(app).put('/api/articles/abc').send({ title: 'Objet', price: 10 });
+    const res = await request(app).put('/api/articles/abc').set('Cookie', COOKIE).send({ title: 'Objet', price: 10 });
     expect(res.status).toBe(400);
     expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('refuse un visiteur non connecté', async () => {
+    const res = await request(app).put('/api/articles/1').send({ title: 'Objet', price: 10 });
+    expect(res.status).toBe(401);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it("refuse la modification de l'annonce d'un autre utilisateur", async () => {
+    db.query.mockResolvedValue({ rows: [{ user_id: 99 }] });
+    const res = await request(app).put('/api/articles/1').set('Cookie', COOKIE).send({ title: 'Objet', price: 10 });
+    expect(res.status).toBe(403);
+    expect(db.query).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuse la modification d'une annonce sans propriétaire", async () => {
+    db.query.mockResolvedValue({ rows: [{ user_id: null }] });
+    const res = await request(app).put('/api/articles/1').set('Cookie', COOKIE).send({ title: 'Objet', price: 10 });
+    expect(res.status).toBe(403);
+  });
+
+  it("autorise un administrateur à modifier l'annonce d'un autre utilisateur", async () => {
+    sessions.findUser.mockResolvedValue({ id: 1, email: 'admin@example.com', role: 'admin' });
+    db.query.mockResolvedValueOnce({ rows: [{ user_id: 99 }] }).mockResolvedValueOnce({ rows: [sample] });
+    const res = await request(app).put('/api/articles/1').set('Cookie', COOKIE).send({ title: 'Objet', price: 10 });
+    expect(res.status).toBe(200);
   });
 
   it.each([
@@ -220,7 +275,7 @@ describe('PUT /api/articles/:id', () => {
     ['prix négatif', { title: 'Objet', price: -1 }],
     ['prix manquant', { title: 'Objet' }],
   ])('refuse une modification invalide (%s)', async (_, body) => {
-    const res = await request(app).put('/api/articles/1').send(body);
+    const res = await request(app).put('/api/articles/1').set('Cookie', COOKIE).send(body);
     expect(res.status).toBe(400);
     expect(db.query).not.toHaveBeenCalled();
   });
@@ -229,9 +284,17 @@ describe('PUT /api/articles/:id', () => {
 describe('images des articles', () => {
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
 
+  const putImage = (id, type, body) => request(app)
+    .put(`/api/articles/${id}/image`)
+    .set('Cookie', COOKIE)
+    .set('Content-Type', type)
+    .send(body);
+
   it('enregistre une image', async () => {
-    db.query.mockResolvedValue({ rows: [{ image_updated_at: '2026-09-30T10:00:00.000Z' }] });
-    const res = await request(app).put('/api/articles/1/image').set('Content-Type', 'image/png').send(png);
+    db.query
+      .mockResolvedValueOnce(owned)
+      .mockResolvedValueOnce({ rows: [{ image_updated_at: '2026-09-30T10:00:00.000Z' }] });
+    const res = await putImage(1, 'image/png', png);
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ image_updated_at: '2026-09-30T10:00:00.000Z' });
@@ -239,28 +302,49 @@ describe('images des articles', () => {
   });
 
   it('refuse un type de fichier non pris en charge', async () => {
-    const res = await request(app).put('/api/articles/1/image').set('Content-Type', 'application/pdf').send(png);
+    const res = await putImage(1, 'application/pdf', png);
     expect(res.status).toBe(415);
     expect(db.query).not.toHaveBeenCalled();
   });
 
   it('refuse un contenu qui ne correspond pas au type annoncé', async () => {
-    const res = await request(app).put('/api/articles/1/image').set('Content-Type', 'image/jpeg').send(png);
+    const res = await putImage(1, 'image/jpeg', png);
     expect(res.status).toBe(400);
     expect(db.query).not.toHaveBeenCalled();
   });
 
   it('refuse une image de plus de 2 Mo', async () => {
     const big = Buffer.concat([png, Buffer.alloc(2 * 1024 * 1024)]);
-    const res = await request(app).put('/api/articles/1/image').set('Content-Type', 'image/png').send(big);
+    const res = await putImage(1, 'image/png', big);
     expect(res.status).toBe(413);
     expect(db.query).not.toHaveBeenCalled();
   });
 
   it("retourne 404 si l'article n'existe pas", async () => {
-    db.query.mockRejectedValue(Object.assign(new Error('foreign key violation'), { code: '23503' }));
-    const res = await request(app).put('/api/articles/999/image').set('Content-Type', 'image/png').send(png);
+    db.query.mockResolvedValue({ rows: [] });
+    const res = await putImage(999, 'image/png', png);
     expect(res.status).toBe(404);
+  });
+
+  it("retourne 404 si l'article est supprimé pendant l'envoi", async () => {
+    db.query
+      .mockResolvedValueOnce(owned)
+      .mockRejectedValueOnce(Object.assign(new Error('foreign key violation'), { code: '23503' }));
+    const res = await putImage(1, 'image/png', png);
+    expect(res.status).toBe(404);
+  });
+
+  it('refuse un visiteur non connecté', async () => {
+    const res = await request(app).put('/api/articles/1/image').set('Content-Type', 'image/png').send(png);
+    expect(res.status).toBe(401);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it("refuse l'image pour l'annonce d'un autre utilisateur", async () => {
+    db.query.mockResolvedValue({ rows: [{ user_id: 99 }] });
+    const res = await putImage(1, 'image/png', png);
+    expect(res.status).toBe(403);
+    expect(db.query).toHaveBeenCalledTimes(1);
   });
 
   it("sert l'image d'un article", async () => {
@@ -279,22 +363,48 @@ describe('images des articles', () => {
   });
 
   it("supprime l'image d'un article", async () => {
-    db.query.mockResolvedValue({ rowCount: 1 });
-    const res = await request(app).delete('/api/articles/1/image');
+    db.query.mockResolvedValueOnce(owned).mockResolvedValueOnce({ rowCount: 1 });
+    const res = await request(app).delete('/api/articles/1/image').set('Cookie', COOKIE);
     expect(res.status).toBe(204);
+  });
+
+  it("refuse la suppression de l'image sans être connecté", async () => {
+    const res = await request(app).delete('/api/articles/1/image');
+    expect(res.status).toBe(401);
+    expect(db.query).not.toHaveBeenCalled();
   });
 });
 
 describe('DELETE /api/articles/:id', () => {
   it('supprime un article', async () => {
-    db.query.mockResolvedValue({ rowCount: 1 });
-    const res = await request(app).delete('/api/articles/3');
+    db.query.mockResolvedValueOnce(owned).mockResolvedValueOnce({ rowCount: 1 });
+    const res = await request(app).delete('/api/articles/3').set('Cookie', COOKIE);
     expect(res.status).toBe(204);
   });
 
   it("retourne 404 si l'article n'existe pas", async () => {
-    db.query.mockResolvedValue({ rowCount: 0 });
-    const res = await request(app).delete('/api/articles/999');
+    db.query.mockResolvedValue({ rows: [] });
+    const res = await request(app).delete('/api/articles/999').set('Cookie', COOKIE);
     expect(res.status).toBe(404);
+  });
+
+  it('refuse un visiteur non connecté', async () => {
+    const res = await request(app).delete('/api/articles/3');
+    expect(res.status).toBe(401);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it("refuse la suppression de l'annonce d'un autre utilisateur", async () => {
+    db.query.mockResolvedValue({ rows: [{ user_id: 99 }] });
+    const res = await request(app).delete('/api/articles/3').set('Cookie', COOKIE);
+    expect(res.status).toBe(403);
+    expect(db.query).toHaveBeenCalledTimes(1);
+  });
+
+  it("autorise un administrateur à supprimer l'annonce d'un autre utilisateur", async () => {
+    sessions.findUser.mockResolvedValue({ id: 1, email: 'admin@example.com', role: 'admin' });
+    db.query.mockResolvedValueOnce({ rows: [{ user_id: 99 }] }).mockResolvedValueOnce({ rowCount: 1 });
+    const res = await request(app).delete('/api/articles/3').set('Cookie', COOKIE);
+    expect(res.status).toBe(204);
   });
 });

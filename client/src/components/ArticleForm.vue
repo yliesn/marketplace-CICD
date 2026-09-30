@@ -149,6 +149,9 @@ async function onSubmit() {
       await nextTick(); // laisse le formulaire se réinitialiser avant d'afficher l'erreur
       throw new Error("Cet article n'existe plus.");
     }
+    if (res.status === 401) {
+      throw new Error('Votre session a expiré. Reconnectez-vous pour enregistrer cette annonce.');
+    }
     if (!res.ok) {
       throw new Error((data.errors || [data.error || "Erreur lors de l'enregistrement"]).join(', '));
     }

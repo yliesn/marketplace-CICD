@@ -122,7 +122,19 @@ title
 description
 price
 created_at
+user_id
 ```
+
+## Comptes utilisateurs
+
+* la consultation des annonces est publique
+* il faut être connecté pour publier une annonce
+* seul l'auteur d'une annonce peut la modifier, la supprimer ou changer sa photo
+* un administrateur (rôle `admin`) a tous les droits sur toutes les annonces
+
+Les annonces sans auteur (créées avant l'authentification) ne sont modifiables que par un administrateur.
+
+Le compte administrateur est créé (ou mis à jour) au démarrage de l'application à partir des variables `ADMIN_EMAIL` et `ADMIN_PASSWORD`, toutes deux optionnelles.
 
 ---
 
@@ -178,9 +190,13 @@ marketplace/
 ├── src/
 │   ├── server.js
 │   ├── db.js
+│   ├── auth.js
+│   ├── sessions.js
+│   ├── migrate.js
 │   │
 │   └── routes/
-│       └── articles.js
+│       ├── articles.js
+│       └── auth.js
 │
 ├── client/
 │   ├── index.html
@@ -188,15 +204,18 @@ marketplace/
 │   └── src/
 │       ├── main.js
 │       ├── App.vue
+│       ├── auth.js
 │       ├── format.js
 │       ├── style.css
 │       │
 │       └── components/
 │           ├── ArticleCard.vue
-│           └── ArticleForm.vue
+│           ├── ArticleForm.vue
+│           └── AuthDialog.vue
 │
 ├── tests/
-│   └── articles.test.js
+│   ├── articles.test.js
+│   └── auth.test.js
 │
 ├── vite.config.mjs
 ├── Dockerfile
@@ -309,6 +328,54 @@ Réponse :
   "status": "ok"
 }
 ```
+
+---
+
+## Authentification
+
+La session est portée par un cookie `sid` (`HttpOnly`, `SameSite=Lax`, `Secure` en HTTPS) valable 7 jours. Seul le hash du jeton est stocké en base (table `sessions`) ; les mots de passe sont hachés avec scrypt.
+
+```http
+POST /api/auth/register
+POST /api/auth/login
+```
+
+Body :
+
+```json
+{
+  "email": "vendeur@example.com",
+  "password": "8 caractères minimum"
+}
+```
+
+Réponse (`201` à l'inscription, `200` à la connexion), accompagnée du cookie de session :
+
+```json
+{
+  "user": { "id": 1, "email": "vendeur@example.com", "role": "user" }
+}
+```
+
+Erreurs : `400` si les données sont invalides, `409` si l'email est déjà utilisé, `401` si l'email ou le mot de passe est incorrect.
+
+```http
+GET /api/auth/me
+POST /api/auth/logout
+```
+
+`GET /api/auth/me` renvoie l'utilisateur connecté (`{ "user": null }` sans session). `POST /api/auth/logout` supprime la session (`204`).
+
+Droits requis par les routes des articles :
+
+| Route                                   | Accès                     |
+|-----------------------------------------|---------------------------|
+| `GET /api/articles`, `GET /api/articles/:id`, `GET /api/articles/:id/image` | public |
+| `POST /api/articles`                    | utilisateur connecté      |
+| `PUT` / `DELETE /api/articles/:id`      | auteur ou administrateur  |
+| `PUT` / `DELETE /api/articles/:id/image` | auteur ou administrateur |
+
+Sans session valide, ces routes renvoient `401` ; pour l'annonce d'un autre utilisateur, `403`.
 
 ---
 
@@ -465,6 +532,8 @@ Les tests doivent notamment vérifier :
 * qu'un article invalide est refusé
 * qu'un article peut être modifié
 * que la recherche, les filtres de prix et la pagination fonctionnent
+* que l'inscription, la connexion et la déconnexion fonctionnent
+* qu'une annonce ne peut être modifiée que par son auteur ou un administrateur
 
 ---
 
@@ -599,6 +668,8 @@ Exemples :
 DB_PASSWORD
 DB_USER
 DB_NAME
+ADMIN_EMAIL
+ADMIN_PASSWORD
 ```
 
 Utiliser les mécanismes adaptés :
@@ -894,10 +965,9 @@ Le développeur n'a donc plus besoin de construire manuellement l'image ou de d�
 
 Une fois le projet fonctionnel, possibilité d'ajouter :
 
-* authentification
-* utilisateurs
+* limitation des tentatives de connexion
+* réinitialisation du mot de passe
 * catégories
-* images des articles
 * statut vendu/disponible
 * tests d'intégration
 * tests end-to-end

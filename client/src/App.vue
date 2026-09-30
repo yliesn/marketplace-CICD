@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import ArticleCard from './components/ArticleCard.vue';
 import ArticleForm from './components/ArticleForm.vue';
+import AuthDialog from './components/AuthDialog.vue';
+import { auth, canEdit, fetchMe, logout } from './auth';
 import { debounce } from './format';
 
 const PER_PAGE = 12;
@@ -19,6 +21,8 @@ const failed = ref(false);
 const filtered = ref(false); // des filtres étaient actifs lors du dernier chargement
 const editing = ref(null); // article en cours de modification
 const formOpen = ref(false);
+const authOpen = ref(false);
+const createAfterAuth = ref(false); // ouvrir le formulaire de dépôt une fois connecté
 const removingId = ref(null);
 const confirmTarget = ref(null);
 const toast = reactive({ message: '', type: 'success', visible: false });
@@ -162,6 +166,15 @@ async function deleteArticle(article) {
   removingId.value = article.id;
   try {
     const res = await fetch(`/api/articles/${article.id}`, { method: 'DELETE' });
+    if (res.status === 401) {
+      auth.user = null;
+      showToast('Votre session a expiré, reconnectez-vous', 'error');
+      return;
+    }
+    if (res.status === 403) {
+      showToast("Vous ne pouvez pas supprimer cette annonce", 'error');
+      return;
+    }
     if (!res.ok && res.status !== 404) throw new Error(res.statusText);
     showToast('Annonce supprimée');
     await loadArticles({ withSkeleton: false });
@@ -175,6 +188,11 @@ async function deleteArticle(article) {
 // ---------- Formulaire ----------
 
 function openCreate() {
+  if (!auth.user) {
+    createAfterAuth.value = true;
+    authOpen.value = true;
+    return;
+  }
   editing.value = null;
   formOpen.value = true;
 }
@@ -215,7 +233,35 @@ function onGone() {
   loadArticles({ withSkeleton: false });
 }
 
-onMounted(() => loadArticles());
+// ---------- Authentification ----------
+
+function openAuth() {
+  createAfterAuth.value = false;
+  authOpen.value = true;
+}
+
+function closeAuth() {
+  authOpen.value = false;
+  createAfterAuth.value = false;
+}
+
+function onAuthDone({ registered }) {
+  const create = createAfterAuth.value;
+  closeAuth();
+  showToast(registered ? 'Compte créé' : 'Connexion réussie');
+  if (create) openCreate();
+}
+
+async function onLogout() {
+  await logout();
+  closeForm();
+  showToast('Vous êtes déconnecté');
+}
+
+onMounted(() => {
+  fetchMe();
+  loadArticles();
+});
 
 onBeforeUnmount(() => clearTimeout(toastTimer));
 </script>
@@ -236,7 +282,16 @@ onBeforeUnmount(() => clearTimeout(toastTimer));
           @input="debouncedReload"
         >
       </div>
-      <button class="btn btn-primary" type="button" @click="openCreate">Déposer une annonce</button>
+      <div class="header-actions">
+        <template v-if="auth.user">
+          <span class="header-user muted small" :title="auth.user.email">
+            {{ auth.user.email }}{{ auth.user.role === 'admin' ? ' (admin)' : '' }}
+          </span>
+          <button class="btn btn-link small" type="button" @click="onLogout">Déconnexion</button>
+        </template>
+        <button v-else class="btn btn-link small" type="button" @click="openAuth">Connexion</button>
+        <button class="btn btn-primary" type="button" @click="openCreate">Déposer une annonce</button>
+      </div>
     </div>
   </header>
 
@@ -310,6 +365,7 @@ onBeforeUnmount(() => clearTimeout(toastTimer));
           :key="article.id"
           :article="article"
           :removing="removingId === article.id"
+          :can-edit="canEdit(article)"
           @edit="openEdit"
           @delete="deleteArticle"
         />
@@ -332,6 +388,8 @@ onBeforeUnmount(() => clearTimeout(toastTimer));
   </main>
 
   <ArticleForm :editing="editing" :open="formOpen" @saved="onSaved" @cancel="closeForm" @gone="onGone" />
+
+  <AuthDialog :open="authOpen" @done="onAuthDone" @cancel="closeAuth" />
 
   <dialog ref="confirmDialog" class="dialog" aria-labelledby="confirm-title">
     <form method="dialog">

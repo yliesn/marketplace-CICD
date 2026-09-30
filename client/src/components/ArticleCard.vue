@@ -7,6 +7,7 @@ const NEW_BADGE_MS = 24 * 60 * 60 * 1000;
 const props = defineProps({
   article: { type: Object, required: true },
   removing: Boolean,
+  canEdit: Boolean,
 });
 
 defineEmits(['edit', 'delete']);
@@ -41,7 +42,7 @@ const isNew = computed(() => Date.now() - new Date(props.article.created_at) < N
       {{ timeAgo(article.created_at) }}
     </time>
 
-    <div class="card-actions">
+    <div v-if="canEdit" class="card-actions">
       <button
         class="card-action"
         type="button"

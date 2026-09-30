@@ -11,6 +11,8 @@ services:
       DB_USER: ${DB_USER:-marketplace}
       DB_PASSWORD: ${DB_PASSWORD:?Definir DB_PASSWORD dans .env}
       DB_NAME: ${DB_NAME:-marketplace}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     depends_on:
       db:
         condition: service_healthy
