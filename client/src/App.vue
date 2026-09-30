@@ -7,7 +7,6 @@ import { debounce } from './format';
 const PER_PAGE = 12;
 const SKELETONS = 6;
 
-const list = ref(null);
 const confirmDialog = ref(null);
 
 const articles = ref([]);
@@ -19,6 +18,7 @@ const skeleton = ref(true);
 const failed = ref(false);
 const filtered = ref(false); // des filtres étaient actifs lors du dernier chargement
 const editing = ref(null); // article en cours de modification
+const formOpen = ref(false);
 const removingId = ref(null);
 const confirmTarget = ref(null);
 const toast = reactive({ message: '', type: 'success', visible: false });
@@ -41,19 +41,19 @@ const countText = computed(() => {
   if (loading.value) return 'Chargement…';
   if (failed.value) return '';
   const plural = total.value > 1 ? 's' : '';
-  return filtered.value ? `${total.value} résultat${plural}` : `${total.value} article${plural} en vente`;
+  return filtered.value ? `${total.value} résultat${plural}` : `${total.value} annonce${plural}`;
 });
 
 const emptyState = computed(() => {
   if (skeleton.value) return null;
   if (failed.value) {
-    return { icon: '⚠️', title: 'Impossible de charger les articles', text: 'Le serveur ne répond pas.', retry: true };
+    return { title: 'Impossible de charger les annonces', text: 'Le serveur ne répond pas.', action: 'retry' };
   }
   if (total.value === 0 && !filtered.value) {
-    return { icon: '📦', title: 'Aucun article pour le moment', text: 'Soyez le premier à publier une annonce.' };
+    return { title: 'Aucune annonce pour le moment', text: 'Soyez le premier à en déposer une.', action: 'create' };
   }
   if (articles.value.length === 0) {
-    return { icon: '🔍', title: 'Aucun résultat', text: 'Aucun article ne correspond à ces critères.' };
+    return { title: 'Aucun résultat', text: 'Aucune annonce ne correspond à ces critères.', action: 'reset' };
   }
   return null;
 });
@@ -141,7 +141,7 @@ function resetFilters() {
 function goToPage(target) {
   page.value = target;
   loadArticles();
-  list.value.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ---------- Suppression ----------
@@ -163,8 +163,7 @@ async function deleteArticle(article) {
   try {
     const res = await fetch(`/api/articles/${article.id}`, { method: 'DELETE' });
     if (!res.ok && res.status !== 404) throw new Error(res.statusText);
-    if (editing.value && editing.value.id === article.id) editing.value = null;
-    showToast('Article supprimé');
+    showToast('Annonce supprimée');
     await loadArticles({ withSkeleton: false });
   } catch {
     showToast('La suppression a échoué', 'error');
@@ -175,91 +174,81 @@ async function deleteArticle(article) {
 
 // ---------- Formulaire ----------
 
-function stopEdit() {
+function openCreate() {
+  editing.value = null;
+  formOpen.value = true;
+}
+
+function openEdit(article) {
+  editing.value = article;
+  formOpen.value = true;
+}
+
+function closeForm() {
+  formOpen.value = false;
   editing.value = null;
 }
 
 function onSaved({ isEdit, imageSaved }) {
   const notify = (message) => (imageSaved
     ? showToast(message)
-    : showToast("Article enregistré, mais la photo n'a pas pu être envoyée", 'error'));
+    : showToast("Annonce enregistrée, mais la photo n'a pas pu être envoyée", 'error'));
+
+  closeForm();
 
   if (isEdit) {
-    stopEdit();
-    notify('Article modifié');
+    notify('Annonce modifiée');
     loadArticles({ withSkeleton: false });
     return;
   }
 
-  notify('Article publié');
-  // On revient sur la vue « plus récents » sans filtre pour voir le nouvel article.
+  notify('Annonce publiée');
+  // On revient sur la vue « plus récentes » sans filtre pour voir la nouvelle annonce.
   filters.sort = 'recent';
   resetFilters();
-  if (window.matchMedia('(max-width: 899px)').matches) {
-    list.value.scrollIntoView({ behavior: 'smooth' });
-  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function onGone() {
-  stopEdit();
+  closeForm();
+  showToast("Cette annonce n'existe plus", 'error');
   loadArticles({ withSkeleton: false });
 }
 
-function onKeydown(event) {
-  if (event.key === 'Escape' && editing.value && !confirmDialog.value.open) stopEdit();
-}
+onMounted(() => loadArticles());
 
-onMounted(() => {
-  document.addEventListener('keydown', onKeydown);
-  loadArticles();
-});
-
-onBeforeUnmount(() => {
-  document.removeEventListener('keydown', onKeydown);
-  clearTimeout(toastTimer);
-});
+onBeforeUnmount(() => clearTimeout(toastTimer));
 </script>
 
 <template>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <a class="brand" href="/">
-        <span class="brand-logo" aria-hidden="true">🛒</span>
-        <span>Marketplace Simulator</span>
-      </a>
-      <a class="btn btn-primary btn-sm only-mobile" href="#publish"><span aria-hidden="true">+</span> Publier</a>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="wordmark" href="/">Marketplace Simulator</a>
+      <div class="header-search">
+        <label class="visually-hidden" for="search">Rechercher</label>
+        <input
+          id="search"
+          v-model="filters.q"
+          class="input search"
+          type="search"
+          placeholder="Rechercher une annonce"
+          autocomplete="off"
+          @input="debouncedReload"
+        >
+      </div>
+      <button class="btn btn-primary" type="button" @click="openCreate">Déposer une annonce</button>
     </div>
   </header>
 
-  <main class="layout">
-    <section class="listing" aria-labelledby="listing-title">
-      <div class="listing-head">
-        <div>
-          <h1 id="listing-title">Articles à vendre</h1>
-          <p class="muted">{{ countText }}</p>
-        </div>
-        <div class="toolbar">
-          <label class="visually-hidden" for="search">Rechercher</label>
-          <input
-            id="search"
-            v-model="filters.q"
-            class="input search"
-            type="search"
-            placeholder="Rechercher un article…"
-            autocomplete="off"
-            @input="debouncedReload"
-          >
-          <label class="visually-hidden" for="sort">Trier</label>
-          <select id="sort" class="input" :value="filters.sort" @change="onSortChange">
-            <option value="recent">Plus récents</option>
-            <option value="price-asc">Prix croissant</option>
-            <option value="price-desc">Prix décroissant</option>
-          </select>
-        </div>
-      </div>
+  <main class="container page" aria-labelledby="listing-title">
+    <div class="page-head">
+      <h1 id="listing-title">Annonces</h1>
+      <p class="muted">{{ countText }}</p>
+    </div>
 
-      <div class="filters" role="group" aria-label="Filtrer par prix">
-        <span class="muted small">Prix</span>
+    <div class="toolbar">
+      <div class="toolbar-group" role="group" aria-label="Filtrer par prix">
+        <span class="toolbar-label">Prix</span>
         <label class="visually-hidden" for="min-price">Prix minimum</label>
         <div class="input-suffix">
           <input
@@ -276,7 +265,7 @@ onBeforeUnmount(() => {
           >
           <span aria-hidden="true">€</span>
         </div>
-        <span class="muted" aria-hidden="true">–</span>
+        <span class="muted" aria-hidden="true">à</span>
         <label class="visually-hidden" for="max-price">Prix maximum</label>
         <div class="input-suffix">
           <input
@@ -293,53 +282,61 @@ onBeforeUnmount(() => {
           >
           <span aria-hidden="true">€</span>
         </div>
-        <button v-if="hasFilters" class="btn btn-ghost btn-sm" type="button" @click="resetFilters">Réinitialiser</button>
-      </div>
-      <p class="field-error" role="alert">{{ filterError }}</p>
-
-      <ul ref="list" class="grid" aria-live="polite">
-        <template v-if="skeleton">
-          <li v-for="n in SKELETONS" :key="`skeleton-${n}`" class="card skeleton" aria-hidden="true">
-            <div class="sk sk-thumb" />
-            <div class="sk sk-line" />
-            <div class="sk sk-line" />
-            <div class="sk sk-line short" />
-          </li>
-        </template>
-        <template v-else>
-          <ArticleCard
-            v-for="article in articles"
-            :key="article.id"
-            :article="article"
-            :editing="editing !== null && editing.id === article.id"
-            :removing="removingId === article.id"
-            @edit="editing = $event"
-            @delete="deleteArticle"
-          />
-        </template>
-      </ul>
-
-      <div v-if="emptyState" class="state">
-        <p class="state-icon" aria-hidden="true">{{ emptyState.icon }}</p>
-        <p class="state-title">{{ emptyState.title }}</p>
-        <p class="muted">{{ emptyState.text }}</p>
-        <button v-if="emptyState.retry" class="btn btn-ghost" type="button" @click="loadArticles()">Réessayer</button>
+        <button v-if="hasFilters" class="btn btn-link small" type="button" @click="resetFilters">Effacer les filtres</button>
       </div>
 
-      <nav v-if="showPagination" class="pagination" aria-label="Pagination">
-        <button class="btn btn-ghost btn-sm" type="button" :disabled="page <= 1" @click="goToPage(page - 1)">← Précédent</button>
-        <span class="muted small">Page {{ page }} / {{ totalPages }}</span>
-        <button class="btn btn-ghost btn-sm" type="button" :disabled="page >= totalPages" @click="goToPage(page + 1)">Suivant →</button>
-      </nav>
-    </section>
+      <div class="toolbar-group">
+        <label class="toolbar-label" for="sort">Trier par</label>
+        <select id="sort" class="input" :value="filters.sort" @change="onSortChange">
+          <option value="recent">Plus récentes</option>
+          <option value="price-asc">Prix croissant</option>
+          <option value="price-desc">Prix décroissant</option>
+        </select>
+      </div>
+    </div>
+    <p class="field-error" role="alert">{{ filterError }}</p>
 
-    <ArticleForm :editing="editing" @saved="onSaved" @cancel="stopEdit" @gone="onGone" />
+    <ul class="grid" aria-live="polite">
+      <template v-if="skeleton">
+        <li v-for="n in SKELETONS" :key="`skeleton-${n}`" class="card skeleton" aria-hidden="true">
+          <div class="sk sk-thumb" />
+          <div class="sk sk-line" />
+          <div class="sk sk-line short" />
+        </li>
+      </template>
+      <template v-else>
+        <ArticleCard
+          v-for="article in articles"
+          :key="article.id"
+          :article="article"
+          :removing="removingId === article.id"
+          @edit="openEdit"
+          @delete="deleteArticle"
+        />
+      </template>
+    </ul>
+
+    <div v-if="emptyState" class="state">
+      <p class="state-title">{{ emptyState.title }}</p>
+      <p class="muted">{{ emptyState.text }}</p>
+      <button v-if="emptyState.action === 'retry'" class="btn btn-ghost" type="button" @click="loadArticles()">Réessayer</button>
+      <button v-else-if="emptyState.action === 'create'" class="btn btn-primary" type="button" @click="openCreate">Déposer une annonce</button>
+      <button v-else class="btn btn-ghost" type="button" @click="resetFilters">Effacer les filtres</button>
+    </div>
+
+    <nav v-if="showPagination" class="pagination" aria-label="Pagination">
+      <button class="btn btn-ghost btn-sm" type="button" :disabled="page <= 1" @click="goToPage(page - 1)">Précédent</button>
+      <span class="muted small">Page {{ page }} sur {{ totalPages }}</span>
+      <button class="btn btn-ghost btn-sm" type="button" :disabled="page >= totalPages" @click="goToPage(page + 1)">Suivant</button>
+    </nav>
   </main>
+
+  <ArticleForm :editing="editing" :open="formOpen" @saved="onSaved" @cancel="closeForm" @gone="onGone" />
 
   <dialog ref="confirmDialog" class="dialog" aria-labelledby="confirm-title">
     <form method="dialog">
-      <h2 id="confirm-title">Supprimer cet article ?</h2>
-      <p class="muted">{{ confirmTarget ? `« ${confirmTarget.title} » sera définitivement supprimé.` : '' }}</p>
+      <h2 id="confirm-title">Supprimer cette annonce ?</h2>
+      <p class="muted">{{ confirmTarget ? `« ${confirmTarget.title} » sera définitivement supprimée.` : '' }}</p>
       <div class="dialog-actions">
         <button class="btn btn-ghost" value="cancel">Annuler</button>
         <button class="btn btn-danger" value="confirm">Supprimer</button>

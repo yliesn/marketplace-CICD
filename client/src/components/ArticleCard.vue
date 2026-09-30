@@ -1,12 +1,11 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { formatDate, formatPrice, hueFor, imageUrl, timeAgo } from '../format';
+import { formatDate, formatPrice, imageUrl, timeAgo } from '../format';
 
 const NEW_BADGE_MS = 24 * 60 * 60 * 1000;
 
 const props = defineProps({
   article: { type: Object, required: true },
-  editing: Boolean,
   removing: Boolean,
 });
 
@@ -15,38 +14,32 @@ defineEmits(['edit', 'delete']);
 const imageFailed = ref(false);
 watch(() => props.article.image_updated_at, () => { imageFailed.value = false; });
 
-const initial = computed(() => (props.article.title.trim()[0] || '?').toUpperCase());
-const hasImage = computed(() => Boolean(props.article.image_updated_at));
+const showImage = computed(() => Boolean(props.article.image_updated_at) && !imageFailed.value);
 const isNew = computed(() => Date.now() - new Date(props.article.created_at) < NEW_BADGE_MS);
 </script>
 
 <template>
-  <li class="card" :class="{ 'is-editing': editing, 'is-removing': removing }">
-    <div
-      class="card-thumb"
-      :style="{ '--hue': hueFor(article.title) }"
-      :aria-hidden="hasImage ? null : 'true'"
-    >
+  <li class="card" :class="{ 'is-removing': removing }">
+    <div class="card-thumb">
       <img
-        v-if="hasImage && !imageFailed"
+        v-if="showImage"
         :src="imageUrl(article)"
         :alt="`Photo de « ${article.title} »`"
         loading="lazy"
         @error="imageFailed = true"
       >
-      <template v-else>{{ initial }}</template>
+      <svg v-else viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="1.5" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="m21 16-5-5L5 20" />
+      </svg>
       <span v-if="isNew" class="badge">Nouveau</span>
     </div>
 
     <h3 class="card-title">{{ article.title }}</h3>
-    <p class="card-desc">{{ article.description || '' }}</p>
-
-    <div class="card-footer">
-      <span class="price">{{ formatPrice(article.price) }}</span>
-      <time class="date" :datetime="article.created_at" :title="formatDate(article.created_at)">
-        {{ timeAgo(article.created_at) }}
-      </time>
-    </div>
+    <p class="price">{{ formatPrice(article.price) }}</p>
+    <p v-if="article.description" class="card-desc">{{ article.description }}</p>
+    <time class="date" :datetime="article.created_at" :title="formatDate(article.created_at)">
+      {{ timeAgo(article.created_at) }}
+    </time>
 
     <div class="card-actions">
       <button

@@ -8,12 +8,12 @@ const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
 const props = defineProps({
   // Article en cours de modification, ou null pour une création.
   editing: { type: Object, default: null },
+  open: Boolean,
 });
 
 const emit = defineEmits(['saved', 'cancel', 'gone']);
 
-const panel = ref(null);
-const titleInput = ref(null);
+const dialog = ref(null);
 const fileInput = ref(null);
 
 const fields = reactive({ title: '', description: '', price: '' });
@@ -28,7 +28,7 @@ const isEdit = computed(() => props.editing !== null);
 
 const submitLabel = computed(() => {
   if (submitting.value) return isEdit.value ? 'Enregistrement…' : 'Publication…';
-  return isEdit.value ? 'Enregistrer' : "Publier l'article";
+  return isEdit.value ? 'Enregistrer' : "Publier l'annonce";
 });
 
 // Aperçu : le fichier choisi, sinon la photo actuelle de l'article en cours de modification.
@@ -61,12 +61,16 @@ function fill(article) {
   removeImage.value = false;
 }
 
-watch(() => props.editing, async (article) => {
-  fill(article);
-  if (!article) return;
-  await nextTick();
-  panel.value.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  titleInput.value.focus({ preventScroll: true });
+watch(() => props.editing, fill);
+
+watch(() => props.open, async (open) => {
+  if (!open) {
+    dialog.value.close();
+    return;
+  }
+  clearErrors();
+  await nextTick(); // le formulaire est rempli avant l'ouverture
+  if (!dialog.value.open) dialog.value.showModal();
 });
 
 onBeforeUnmount(() => setFile(null));
@@ -121,7 +125,7 @@ async function onSubmit() {
   formError.value = '';
   if (!validate()) {
     await nextTick();
-    panel.value.querySelector('[aria-invalid="true"]')?.focus();
+    dialog.value.querySelector('[aria-invalid="true"]')?.focus();
     return;
   }
 
@@ -161,19 +165,24 @@ async function onSubmit() {
 </script>
 
 <template>
-  <aside id="publish" ref="panel" class="panel" :class="{ 'is-editing': isEdit }" aria-labelledby="publish-title">
-    <h2 id="publish-title">{{ isEdit ? "Modifier l'article" : 'Publier un article' }}</h2>
-    <p class="muted small">
-      {{ isEdit ? 'Les modifications sont visibles immédiatement.' : 'Il sera visible immédiatement par tout le monde.' }}
-    </p>
+  <dialog ref="dialog" class="dialog dialog-form" aria-labelledby="publish-title" @close="$emit('cancel')">
+    <div class="dialog-head">
+      <div>
+        <h2 id="publish-title">{{ isEdit ? "Modifier l'annonce" : 'Déposer une annonce' }}</h2>
+        <p class="muted small">
+          {{ isEdit ? 'Les modifications sont visibles immédiatement.' : 'Elle sera visible immédiatement par tout le monde.' }}
+        </p>
+      </div>
+      <button class="btn btn-link" type="button" @click="$emit('cancel')">Fermer</button>
+    </div>
 
     <form novalidate @submit.prevent="onSubmit">
       <div class="field">
         <label for="title">Titre</label>
         <input
           id="title"
-          ref="titleInput"
           v-model="fields.title"
+          autofocus
           name="title"
           class="input"
           type="text"
@@ -248,8 +257,10 @@ async function onSubmit() {
 
       <p v-if="formError" class="alert" role="alert">{{ formError }}</p>
 
-      <button class="btn btn-primary btn-block" type="submit" :disabled="submitting">{{ submitLabel }}</button>
-      <button v-if="isEdit" class="btn btn-ghost btn-block" type="button" @click="$emit('cancel')">Annuler</button>
+      <div class="dialog-actions">
+        <button class="btn btn-ghost" type="button" @click="$emit('cancel')">Annuler</button>
+        <button class="btn btn-primary" type="submit" :disabled="submitting">{{ submitLabel }}</button>
+      </div>
     </form>
-  </aside>
+  </dialog>
 </template>

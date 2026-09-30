@@ -23,13 +23,6 @@ export function timeAgo(value) {
   return "à l'instant";
 }
 
-// Teinte stable dérivée du titre, pour différencier les vignettes.
-export function hueFor(text) {
-  let hash = 0;
-  for (const char of text) hash = (hash * 31 + char.codePointAt(0)) % 360;
-  return hash;
-}
-
 export function imageUrl(article) {
   return `/api/articles/${article.id}/image?v=${Date.parse(article.image_updated_at)}`;
 }
