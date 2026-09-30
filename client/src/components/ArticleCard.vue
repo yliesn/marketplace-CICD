@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue';
 import { formatDate, formatPrice, imageUrl, timeAgo } from '../format';
 import { RouterLink } from 'vue-router';
+import { badgesOf, categoryName } from '../catalog';
+import { toggleFavorite } from '../ui';
 import Icon from './Icon.vue';
 
 const NEW_BADGE_MS = 24 * 60 * 60 * 1000;
@@ -19,6 +21,8 @@ watch(() => props.article.image_updated_at, () => { imageFailed.value = false; }
 
 const showImage = computed(() => Boolean(props.article.image_updated_at) && !imageFailed.value);
 const isNew = computed(() => Date.now() - new Date(props.article.created_at) < NEW_BADGE_MS);
+const badges = computed(() => badgesOf(props.article));
+const category = computed(() => categoryName(props.article));
 </script>
 
 <template>
@@ -32,10 +36,25 @@ const isNew = computed(() => Date.now() - new Date(props.article.created_at) < N
         @error="imageFailed = true"
       >
       <Icon v-else name="image" size="36" />
-      <span v-if="isNew" class="badge badge-new">Nouveau</span>
+      <div v-if="isNew || badges.length" class="badges">
+        <span v-if="isNew" class="badge badge-new">Nouveau</span>
+        <span v-for="badge in badges" :key="badge.id" class="badge" :class="`badge-${badge.style}`">{{ badge.name }}</span>
+      </div>
+      <button
+        class="card-action card-fav"
+        :class="{ 'is-favorite': article.is_favorite }"
+        type="button"
+        :aria-pressed="article.is_favorite ? 'true' : 'false'"
+        :aria-label="`Favori : « ${article.title} »`"
+        :title="article.is_favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'"
+        @click="toggleFavorite(article)"
+      >
+        <Icon name="heart" />
+      </button>
     </div>
 
     <div class="card-body">
+      <p v-if="category" class="category">{{ category }}</p>
       <h3 class="card-title">
         <!-- Le lien s'étend à toute la carte (voir .card-link::after). -->
         <RouterLink class="card-link" :to="{ name: 'article', params: { id: article.id } }">{{ article.title }}</RouterLink>

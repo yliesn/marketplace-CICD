@@ -4,8 +4,9 @@ import { RouterLink, useRoute, useRouter } from 'vue-router';
 import ArticleCard from '../components/ArticleCard.vue';
 import Icon from '../components/Icon.vue';
 import { auth, canEdit } from '../auth';
+import { badgesOf, categoryName } from '../catalog';
 import { formatDate, formatMonth, formatPrice, imageUrl, timeAgo } from '../format';
-import { articlesVersion, deleteArticle, openEdit, removingId, showToast } from '../ui';
+import { articlesVersion, deleteArticle, openEdit, removingId, showToast, toggleFavorite } from '../ui';
 
 const NEW_BADGE_MS = 24 * 60 * 60 * 1000;
 const OTHERS_LIMIT = 4;
@@ -23,6 +24,8 @@ let requestId = 0; // ignore les réponses obsolètes
 const showImage = computed(() => Boolean(article.value?.image_updated_at) && !imageFailed.value);
 const isNew = computed(() => Date.now() - new Date(article.value.created_at) < NEW_BADGE_MS);
 const editable = computed(() => canEdit(article.value));
+const badges = computed(() => badgesOf(article.value));
+const category = computed(() => categoryName(article.value));
 
 const sellerCountText = computed(() => {
   const count = article.value.seller_count || 0;
@@ -78,7 +81,8 @@ async function load({ quiet = false } = {}) {
 watch(() => route.params.id, (id) => { if (id) load(); }, { immediate: true });
 
 // L'annonce a été modifiée depuis le formulaire : on rafraîchit sans faire clignoter la page.
-watch(articlesVersion, () => { if (status.value === 'ready') load({ quiet: true }); });
+// Même chose après une connexion ou une déconnexion : l'état « favori » dépend de l'utilisateur.
+watch([articlesVersion, () => auth.user?.id], () => { if (status.value === 'ready') load({ quiet: true }); });
 
 async function onDelete() {
   if (await deleteArticle(article.value)) router.push({ name: 'home' });
@@ -137,7 +141,11 @@ async function copyLink() {
         </div>
 
         <div class="detail-info">
-          <span v-if="isNew" class="badge badge-new">Nouveau</span>
+          <div v-if="isNew || badges.length" class="badges">
+            <span v-if="isNew" class="badge badge-new">Nouveau</span>
+            <span v-for="badge in badges" :key="badge.id" class="badge" :class="`badge-${badge.style}`">{{ badge.name }}</span>
+          </div>
+          <p v-if="category" class="category">{{ category }}</p>
           <h1>{{ article.title }}</h1>
           <p class="detail-price">{{ formatPrice(article.price) }}</p>
           <time class="date" :datetime="article.created_at" :title="formatDate(article.created_at)">
@@ -163,6 +171,15 @@ async function copyLink() {
               <button class="btn btn-primary" type="button" @click="openEdit(article)"><Icon name="pencil" />Modifier</button>
               <button class="btn btn-ghost" type="button" @click="onDelete"><Icon name="trash" />Supprimer</button>
             </template>
+            <button
+              class="btn btn-secondary"
+              :class="{ 'is-favorite': article.is_favorite }"
+              type="button"
+              :aria-pressed="article.is_favorite ? 'true' : 'false'"
+              @click="toggleFavorite(article)"
+            >
+              <Icon name="heart" />{{ article.is_favorite ? 'Dans vos favoris' : 'Ajouter aux favoris' }}
+            </button>
             <button class="btn btn-secondary" type="button" @click="copyLink"><Icon name="link" />Copier le lien</button>
           </div>
         </div>

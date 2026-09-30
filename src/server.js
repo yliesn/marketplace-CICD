@@ -2,6 +2,8 @@ const path = require('path');
 const express = require('express');
 const articlesRouter = require('./routes/articles');
 const authRouter = require('./routes/auth');
+const adminRouter = require('./routes/admin');
+const catalog = require('./routes/catalog');
 const { loadUser } = require('./auth');
 
 const app = express();
@@ -12,7 +14,6 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'dist')));
 
-
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
@@ -20,6 +21,9 @@ app.get('/health', (req, res) => {
 app.use('/api', loadUser);
 app.use('/api/auth', authRouter);
 app.use('/api/articles', articlesRouter);
+app.use('/api/categories', catalog.categories);
+app.use('/api/badges', catalog.badges);
+app.use('/api/admin', adminRouter);
 
 app.use('/api', (req, res) => {
   res.status(404).json({ error: 'Route introuvable' });

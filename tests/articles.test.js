@@ -65,8 +65,50 @@ describe('GET /api/articles', () => {
     await request(app).get('/api/articles');
     const [sql, params] = db.query.mock.calls[0];
     expect(sql).toMatch(/ORDER BY created_at DESC/);
-    expect(sql).not.toMatch(/WHERE/);
+    expect(sql).not.toMatch(/ILIKE|price [<>]=|category_id =/);
+    expect(sql).toMatch(/FALSE AS is_favorite/);
     expect(params).toEqual([20, 0]);
+  });
+
+  it('filtre par catégorie', async () => {
+    db.query.mockResolvedValue({ rows: [] });
+    const res = await request(app).get('/api/articles').query({ category_id: 2 });
+    expect(res.status).toBe(200);
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toMatch(/category_id = \$1/);
+    expect(params).toEqual([2, 20, 0]);
+  });
+
+  it("indique les favoris de l'utilisateur connecté", async () => {
+    db.query.mockResolvedValue({ rows: [] });
+    await request(app).get('/api/articles').set('Cookie', COOKIE);
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toMatch(/f\.user_id = \$1\) AS is_favorite/);
+    expect(params).toEqual([user.id, 20, 0]);
+  });
+
+  it("liste les favoris de l'utilisateur connecté", async () => {
+    db.query.mockResolvedValue({ rows: [] });
+    const res = await request(app).get('/api/articles').set('Cookie', COOKIE).query({ favorites: 1, q: 'figurine' });
+    expect(res.status).toBe(200);
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toMatch(/WHERE \(title ILIKE \$1 OR description ILIKE \$1\) AND EXISTS \(.*f\.user_id = \$2\)/s);
+    expect(params).toEqual(['%figurine%', user.id, user.id, 20, 0]);
+  });
+
+  it('refuse la liste des favoris sans être connecté', async () => {
+    const res = await request(app).get('/api/articles').query({ favorites: 1 });
+    expect(res.status).toBe(401);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('compte les favoris sans le paramètre de sélection pour une page hors limites', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ total: '1' }] });
+    const res = await request(app).get('/api/articles').set('Cookie', COOKIE).query({ favorites: 1, page: 5 });
+    expect(res.headers['x-total-count']).toBe('1');
+    expect(db.query.mock.calls[1][1]).toEqual([user.id]);
   });
 
   it('filtre par recherche et fourchette de prix', async () => {
@@ -175,8 +217,40 @@ describe('POST /api/articles', () => {
     expect(res.body).toEqual(created);
     expect(db.query).toHaveBeenCalledWith(
       expect.stringContaining('INSERT'),
-      ['Souris sans fil', 'Souris Logitech', 25, user.id]
+      ['Souris sans fil', 'Souris Logitech', 25, user.id, null]
     );
+  });
+
+  it('crée un article avec une catégorie et des badges', async () => {
+    db.query.mockResolvedValueOnce({ rows: [{ ...sample, id: 3 }] }).mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(app)
+      .post('/api/articles')
+      .set('Cookie', COOKIE)
+      .send({ title: 'Figurine', price: 25, category_id: '2', badge_ids: [1, 2] });
+
+    expect(res.status).toBe(201);
+    expect(db.query.mock.calls[0][1]).toEqual(['Figurine', '', 25, user.id, 2]);
+    const [sql, params] = db.query.mock.calls[1];
+    expect(sql).toMatch(/INSERT INTO article_badges/);
+    expect(params).toEqual([3, [1, 2]]);
+  });
+
+  it('refuse une catégorie inconnue', async () => {
+    db.query.mockRejectedValue(Object.assign(new Error('foreign key violation'), { code: '23503' }));
+    const res = await request(app).post('/api/articles').set('Cookie', COOKIE).send({ title: 'Objet', price: 10, category_id: 99 });
+    expect(res.status).toBe(400);
+  });
+
+  it.each([
+    ['catégorie invalide', { category_id: 'abc' }],
+    ['badges non listés', { badge_ids: 3 }],
+    ['badge invalide', { badge_ids: [1, -2] }],
+    ['trop de badges', { badge_ids: Array.from({ length: 11 }, (_, i) => i + 1) }],
+  ])('refuse une catégorie ou des badges invalides (%s)', async (_, extra) => {
+    const res = await request(app).post('/api/articles').set('Cookie', COOKIE).send({ title: 'Objet', price: 10, ...extra });
+    expect(res.status).toBe(400);
+    expect(db.query).not.toHaveBeenCalled();
   });
 
   it('refuse un visiteur non connecté', async () => {
@@ -228,8 +302,16 @@ describe('PUT /api/articles/:id', () => {
     expect(res.body).toEqual(updated);
     expect(db.query).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE'),
-      ['Clavier RGB', 'Clavier en très bon état', 39.9, 1]
+      ['Clavier RGB', 'Clavier en très bon état', 39.9, null, 1]
     );
+    expect(db.query).toHaveBeenCalledTimes(2); // badge_ids absent : badges inchangés
+  });
+
+  it('remplace les badges', async () => {
+    db.query.mockResolvedValueOnce(owned).mockResolvedValueOnce({ rows: [sample] }).mockResolvedValueOnce({ rows: [] });
+    const res = await request(app).put('/api/articles/1').set('Cookie', COOKIE).send({ title: 'Objet', price: 10, badge_ids: [] });
+    expect(res.status).toBe(200);
+    expect(db.query.mock.calls[2]).toEqual([expect.stringContaining('DELETE FROM article_badges'), [1, []]]);
   });
 
   it("retourne 404 si l'article n'existe pas", async () => {
@@ -406,5 +488,33 @@ describe('DELETE /api/articles/:id', () => {
     db.query.mockResolvedValueOnce({ rows: [{ user_id: 99 }] }).mockResolvedValueOnce({ rowCount: 1 });
     const res = await request(app).delete('/api/articles/3').set('Cookie', COOKIE);
     expect(res.status).toBe(204);
+  });
+});
+
+describe('favoris', () => {
+  it('ajoute un favori', async () => {
+    db.query.mockResolvedValue({ rowCount: 1 });
+    const res = await request(app).put('/api/articles/3/favorite').set('Cookie', COOKIE);
+    expect(res.status).toBe(204);
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO favorites'), [user.id, 3]);
+  });
+
+  it("retourne 404 si l'article n'existe pas", async () => {
+    db.query.mockRejectedValue(Object.assign(new Error('foreign key violation'), { code: '23503' }));
+    const res = await request(app).put('/api/articles/999/favorite').set('Cookie', COOKIE);
+    expect(res.status).toBe(404);
+  });
+
+  it('retire un favori', async () => {
+    db.query.mockResolvedValue({ rowCount: 1 });
+    const res = await request(app).delete('/api/articles/3/favorite').set('Cookie', COOKIE);
+    expect(res.status).toBe(204);
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM favorites'), [user.id, 3]);
+  });
+
+  it('refuse un visiteur non connecté', async () => {
+    const res = await request(app).put('/api/articles/3/favorite');
+    expect(res.status).toBe(401);
+    expect(db.query).not.toHaveBeenCalled();
   });
 });

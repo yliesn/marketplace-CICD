@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { imageUrl } from '../format';
+import { catalog } from '../catalog';
 import Icon from './Icon.vue';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -17,7 +18,7 @@ const emit = defineEmits(['saved', 'cancel', 'gone']);
 const dialog = ref(null);
 const fileInput = ref(null);
 
-const fields = reactive({ title: '', description: '', price: '' });
+const fields = reactive({ title: '', description: '', price: '', categoryId: '', badgeIds: [] });
 const errors = reactive({ title: '', price: '', image: '' });
 const formError = ref('');
 const submitting = ref(false);
@@ -57,6 +58,8 @@ function fill(article) {
   fields.title = article ? article.title : '';
   fields.description = article ? article.description || '' : '';
   fields.price = article ? Number(article.price) : '';
+  fields.categoryId = article?.category_id ?? '';
+  fields.badgeIds = article ? [...(article.badge_ids || [])] : [];
   clearErrors();
   setFile(null);
   removeImage.value = false;
@@ -141,6 +144,8 @@ async function onSubmit() {
         title: fields.title,
         description: fields.description,
         price: Number(fields.price),
+        category_id: fields.categoryId === '' ? null : fields.categoryId,
+        badge_ids: fields.badgeIds,
       }),
     });
 
@@ -213,6 +218,24 @@ async function onSubmit() {
           maxlength="500"
           placeholder="État, année, emballage d'origine, histoire de l'objet…"
         />
+      </div>
+
+      <div v-if="catalog.categories.length" class="field">
+        <label for="category"><Icon name="package" />Catégorie</label>
+        <select id="category" v-model="fields.categoryId" name="category" class="input">
+          <option value="">Sans catégorie</option>
+          <option v-for="category in catalog.categories" :key="category.id" :value="category.id">{{ category.name }}</option>
+        </select>
+      </div>
+
+      <div v-if="catalog.badges.length" class="field" role="group" aria-labelledby="badges-label">
+        <span id="badges-label" class="field-label"><Icon name="star" />Badges</span>
+        <div class="checks">
+          <label v-for="badge in catalog.badges" :key="badge.id" class="check">
+            <input v-model="fields.badgeIds" type="checkbox" :value="badge.id">
+            <span class="badge" :class="`badge-${badge.style}`">{{ badge.name }}</span>
+          </label>
+        </div>
       </div>
 
       <div class="field">

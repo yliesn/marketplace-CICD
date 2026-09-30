@@ -12,13 +12,25 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS categories (
+  id   SERIAL PRIMARY KEY,
+  name VARCHAR(40) NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS badges (
+  id    SERIAL PRIMARY KEY,
+  name  VARCHAR(40) NOT NULL UNIQUE,
+  style VARCHAR(10) NOT NULL DEFAULT 'accent' CHECK (style IN ('accent', 'cream'))
+);
+
 CREATE TABLE IF NOT EXISTS articles (
   id          SERIAL PRIMARY KEY,
   title       VARCHAR(255)   NOT NULL,
   description TEXT           NOT NULL DEFAULT '',
   price       NUMERIC(10, 2) NOT NULL CHECK (price >= 0),
   created_at  TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
-  user_id     INTEGER        REFERENCES users(id) ON DELETE SET NULL
+  user_id     INTEGER        REFERENCES users(id) ON DELETE SET NULL,
+  category_id INTEGER        REFERENCES categories(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS article_images (
@@ -27,6 +39,22 @@ CREATE TABLE IF NOT EXISTS article_images (
   data         BYTEA       NOT NULL,
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS article_badges (
+  article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  badge_id   INTEGER NOT NULL REFERENCES badges(id) ON DELETE CASCADE,
+  PRIMARY KEY (article_id, badge_id)
+);
+
+CREATE TABLE IF NOT EXISTS favorites (
+  user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  article_id INTEGER     NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, article_id)
+);
+
+INSERT INTO categories (name) VALUES ('Figurines'), ('Jeux vidéo'), ('Cartes'), ('Affiches');
+INSERT INTO badges (name, style) VALUES ('Rare', 'accent'), ('Vintage', 'cream');
 
 INSERT INTO articles (title, description, price, created_at) VALUES
   ('Clavier mécanique', 'Clavier en très bon état', 45.00, NOW() - INTERVAL '2 hours'),

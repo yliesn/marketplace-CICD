@@ -22,15 +22,15 @@ function onSearchInput() {
 
 // ---------- Confirmation de suppression ----------
 
-watch(() => confirmState.target, (target) => {
-  if (!target) return;
+watch(() => confirmState.open, (open) => {
+  if (!open) return;
   confirmDialog.value.returnValue = 'cancel';
   confirmDialog.value.showModal();
 });
 
 function onConfirmClose() {
   confirmState.resolve?.(confirmDialog.value.returnValue === 'confirm');
-  confirmState.target = null;
+  confirmState.open = false;
   confirmState.resolve = null;
 }
 </script>
@@ -82,8 +82,8 @@ function onConfirmClose() {
 
   <dialog ref="confirmDialog" class="dialog" aria-labelledby="confirm-title" @close="onConfirmClose">
     <form method="dialog">
-      <h2 id="confirm-title">Supprimer cette annonce ?</h2>
-      <p class="muted">{{ confirmState.target ? `« ${confirmState.target.title} » sera définitivement supprimée.` : '' }}</p>
+      <h2 id="confirm-title">{{ confirmState.title }}</h2>
+      <p class="muted">{{ confirmState.message }}</p>
       <div class="dialog-actions">
         <button class="btn btn-secondary" value="cancel">Annuler</button>
         <button class="btn btn-danger" value="confirm"><Icon name="trash" />Supprimer</button>

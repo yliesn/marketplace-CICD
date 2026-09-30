@@ -12,10 +12,10 @@ async function send(path, body) {
   if (!res.ok) {
     throw new Error((data.errors || [data.error || 'Une erreur est survenue']).join(', '));
   }
-  auth.user = data.user;
+  return data;
 }
 
-export async function fetchMe() {
+async function fetchMe() {
   try {
     const res = await fetch('/api/auth/me');
     auth.user = res.ok ? (await res.json()).user : null;
@@ -31,12 +31,16 @@ export function authReady() {
   return ready;
 }
 
-export function login(email, password) {
-  return send('login', { email, password });
+export async function login(email, password) {
+  auth.user = (await send('login', { email, password })).user;
 }
 
-export function register(email, password) {
-  return send('register', { email, password });
+export async function register(email, password) {
+  auth.user = (await send('register', { email, password })).user;
+}
+
+export async function changePassword(currentPassword, newPassword) {
+  await send('password', { current_password: currentPassword, new_password: newPassword });
 }
 
 export async function logout() {

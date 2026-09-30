@@ -1,10 +1,11 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onActivated, onMounted, reactive, ref, watch } from 'vue';
 import ArticleCard from '../components/ArticleCard.vue';
 import Icon from '../components/Icon.vue';
-import { canEdit } from '../auth';
+import { auth, canEdit } from '../auth';
+import { catalog } from '../catalog';
 import { debounce } from '../format';
-import { articlesVersion, deleteArticle, lastChange, openCreate, openEdit, removingId, search } from '../ui';
+import { articlesVersion, deleteArticle, favoritesVersion, lastChange, openCreate, openEdit, removingId, search } from '../ui';
 
 const PER_PAGE = 12;
 const SKELETONS = 6;
@@ -19,11 +20,13 @@ const failed = ref(false);
 const filtered = ref(false); // des filtres étaient actifs lors du dernier chargement
 
 // La recherche vient du champ de l'en-tête (voir ui.js).
-const filters = reactive({ sort: 'recent', min: '', max: '' });
+const filters = reactive({ sort: 'recent', min: '', max: '', category: '' });
 
 let requestId = 0; // ignore les réponses obsolètes
 
-const hasFilters = computed(() => search.value.trim() !== '' || filters.min !== '' || filters.max !== '');
+const hasFilters = computed(() => (
+  search.value.trim() !== '' || filters.min !== '' || filters.max !== '' || filters.category !== ''
+));
 
 const filterError = computed(() => {
   const min = filters.min === '' ? null : Number(filters.min);
@@ -62,6 +65,7 @@ function buildQuery() {
   if (q) params.set('q', q);
   if (filters.min !== '') params.set('min_price', filters.min);
   if (filters.max !== '') params.set('max_price', filters.max);
+  if (filters.category !== '') params.set('category_id', filters.category);
   return params;
 }
 
@@ -120,6 +124,7 @@ function resetFilters() {
   search.value = '';
   filters.min = '';
   filters.max = '';
+  filters.category = '';
   reloadFromFirstPage();
 }
 
@@ -138,6 +143,16 @@ watch(articlesVersion, () => {
     return;
   }
   loadArticles({ withSkeleton: false });
+});
+
+// L'état « favori » des annonces dépend de l'utilisateur connecté.
+watch(() => auth.user?.id, () => loadArticles({ withSkeleton: false }));
+
+// L'accueil reste en mémoire (KeepAlive) : si des favoris ont changé ailleurs, on le rafraîchit au retour.
+let seenFavorites = favoritesVersion.value;
+onActivated(() => {
+  if (seenFavorites !== favoritesVersion.value) loadArticles({ withSkeleton: false });
+  seenFavorites = favoritesVersion.value;
 });
 
 onMounted(() => loadArticles());
@@ -205,6 +220,14 @@ onMounted(() => loadArticles());
             <span aria-hidden="true">€</span>
           </div>
           <button v-if="hasFilters" class="btn btn-link small" type="button" @click="resetFilters"><Icon name="x" size="14" />Effacer les filtres</button>
+        </div>
+
+        <div v-if="catalog.categories.length" class="toolbar-group">
+          <label class="toolbar-label" for="category-filter"><Icon name="package" />Catégorie</label>
+          <select id="category-filter" v-model="filters.category" class="input" @change="reloadFromFirstPage">
+            <option value="">Toutes</option>
+            <option v-for="category in catalog.categories" :key="category.id" :value="String(category.id)">{{ category.name }}</option>
+          </select>
         </div>
 
         <div class="toolbar-group">

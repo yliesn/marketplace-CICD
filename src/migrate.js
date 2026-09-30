@@ -23,6 +23,42 @@ const SCHEMA = `
 
   ALTER TABLE articles
     ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+
+  CREATE TABLE IF NOT EXISTS categories (
+    id   SERIAL PRIMARY KEY,
+    name VARCHAR(40) NOT NULL UNIQUE
+  );
+
+  CREATE TABLE IF NOT EXISTS badges (
+    id    SERIAL PRIMARY KEY,
+    name  VARCHAR(40) NOT NULL UNIQUE,
+    style VARCHAR(10) NOT NULL DEFAULT 'accent' CHECK (style IN ('accent', 'cream'))
+  );
+
+  ALTER TABLE articles
+    ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL;
+
+  CREATE TABLE IF NOT EXISTS article_badges (
+    article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    badge_id   INTEGER NOT NULL REFERENCES badges(id) ON DELETE CASCADE,
+    PRIMARY KEY (article_id, badge_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS favorites (
+    user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    article_id INTEGER     NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, article_id)
+  );
+
+  -- Valeurs de départ, uniquement si la table est vide : les administrateurs gèrent la suite.
+  INSERT INTO categories (name)
+    SELECT name FROM (VALUES ('Figurines'), ('Jeux vidéo'), ('Cartes'), ('Affiches')) AS seed(name)
+    WHERE NOT EXISTS (SELECT 1 FROM categories);
+
+  INSERT INTO badges (name, style)
+    SELECT name, style FROM (VALUES ('Rare', 'accent'), ('Vintage', 'cream')) AS seed(name, style)
+    WHERE NOT EXISTS (SELECT 1 FROM badges);
 `;
 
 // Crée le compte administrateur (ou le met à jour) à partir de l'environnement.

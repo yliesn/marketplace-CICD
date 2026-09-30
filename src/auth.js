@@ -64,6 +64,12 @@ function requireAuth(req, res, next) {
   next();
 }
 
+function requireAdmin(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'Authentification requise' });
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Action réservée aux administrateurs' });
+  next();
+}
+
 module.exports = {
   hashPassword,
   verifyPassword,
@@ -71,4 +77,5 @@ module.exports = {
   clearSessionCookie,
   loadUser,
   requireAuth,
+  requireAdmin,
 };

@@ -123,14 +123,23 @@ description
 price
 created_at
 user_id
+category_id
+badge_ids
 ```
+
+## Catégories, badges et favoris
+
+* les catégories (Figurines, Jeux vidéo, Cartes, Affiches au départ) et les badges (Rare, Vintage) sont créés et supprimés uniquement par les administrateurs
+* le vendeur choisit une catégorie et des badges pour son annonce ; l'accueil filtre par catégorie
+* un utilisateur connecté ajoute des annonces à ses favoris (le cœur) et les retrouve dans « Mes favoris » sur son profil
 
 ## Comptes utilisateurs
 
 * la consultation des annonces est publique
 * il faut être connecté pour publier une annonce
 * seul l'auteur d'une annonce peut la modifier, la supprimer ou changer sa photo
-* un administrateur (rôle `admin`) a tous les droits sur toutes les annonces
+* un administrateur (rôle `admin`) a tous les droits sur toutes les annonces, et peut nommer d'autres administrateurs (page « Administration »)
+* chacun peut changer son mot de passe depuis son profil (ses autres sessions sont alors fermées)
 
 Les annonces sans auteur (créées avant l'authentification) ne sont modifiables que par un administrateur.
 
@@ -193,10 +202,13 @@ marketplace/
 │   ├── auth.js
 │   ├── sessions.js
 │   ├── migrate.js
+│   ├── params.js
 │   │
 │   └── routes/
+│       ├── admin.js
 │       ├── articles.js
-│       └── auth.js
+│       ├── auth.js
+│       └── catalog.js
 │
 ├── client/
 │   ├── index.html
@@ -205,15 +217,28 @@ marketplace/
 │       ├── main.js
 │       ├── App.vue
 │       ├── auth.js
+│       ├── catalog.js
 │       ├── format.js
+│       ├── router.js
+│       ├── ui.js
 │       ├── style.css
 │       │
-│       └── components/
-│           ├── ArticleCard.vue
-│           ├── ArticleForm.vue
-│           └── AuthDialog.vue
+│       ├── components/
+│       │   ├── ArticleCard.vue
+│       │   ├── ArticleForm.vue
+│       │   ├── Icon.vue
+│       │   └── Logo.vue
+│       │
+│       └── pages/
+│           ├── AdminPage.vue
+│           ├── ArticlePage.vue
+│           ├── AuthPage.vue
+│           ├── HomePage.vue
+│           ├── NotFoundPage.vue
+│           └── ProfilePage.vue
 │
 ├── tests/
+│   ├── admin.test.js
 │   ├── articles.test.js
 │   └── auth.test.js
 │
@@ -366,16 +391,59 @@ POST /api/auth/logout
 
 `GET /api/auth/me` renvoie l'utilisateur connecté (`{ "user": null }` sans session). `POST /api/auth/logout` supprime la session (`204`).
 
-Droits requis par les routes des articles :
+```http
+POST /api/auth/password
+```
+
+Body : `{ "current_password": "...", "new_password": "8 caractères minimum" }`. Réponse `204` ; les autres sessions de l'utilisateur sont fermées. `403` si le mot de passe actuel est incorrect.
+
+Droits requis par les routes :
 
 | Route                                   | Accès                     |
 |-----------------------------------------|---------------------------|
 | `GET /api/articles`, `GET /api/articles/:id`, `GET /api/articles/:id/image` | public |
+| `GET /api/categories`, `GET /api/badges` | public                   |
 | `POST /api/articles`                    | utilisateur connecté      |
+| `PUT` / `DELETE /api/articles/:id/favorite` | utilisateur connecté  |
 | `PUT` / `DELETE /api/articles/:id`      | auteur ou administrateur  |
 | `PUT` / `DELETE /api/articles/:id/image` | auteur ou administrateur |
+| `POST /api/categories`, `DELETE /api/categories/:id` | administrateur |
+| `POST /api/badges`, `DELETE /api/badges/:id` | administrateur       |
+| `GET /api/admin/users`, `PUT /api/admin/users/:id/role` | administrateur |
 
-Sans session valide, ces routes renvoient `401` ; pour l'annonce d'un autre utilisateur, `403`.
+Sans session valide, ces routes renvoient `401` ; pour l'annonce d'un autre utilisateur ou une route d'administration, `403`.
+
+## Catégories et badges
+
+```http
+GET /api/categories          → [{ "id": 1, "name": "Figurines" }, …]
+POST /api/categories         { "name": "Consoles" }
+GET /api/badges              → [{ "id": 1, "name": "Rare", "style": "accent" }, …]
+POST /api/badges             { "name": "Édition limitée", "style": "cream" }
+DELETE /api/categories/:id
+DELETE /api/badges/:id
+```
+
+`style` vaut `accent` (fond rouge vintage) ou `cream` (fond crème), selon la charte. Un nom déjà utilisé renvoie `409`. Supprimer une catégorie laisse ses annonces sans catégorie ; supprimer un badge le retire des annonces.
+
+## Administrateurs
+
+```http
+GET /api/admin/users
+PUT /api/admin/users/7/role   { "role": "admin" }
+```
+
+Un administrateur ne peut pas changer son propre rôle (`400`) : il en reste toujours au moins un.
+
+## Favoris
+
+```http
+PUT /api/articles/3/favorite
+DELETE /api/articles/3/favorite
+GET /api/articles?favorites=1
+```
+
+Les articles renvoyés contiennent `is_favorite` (toujours `false` sans session).
 
 ---
 
@@ -393,6 +461,9 @@ Paramètres (tous optionnels) :
 | `q`         | recherche dans le titre et la description (insensible à la casse) | —        |
 | `min_price` | prix minimum (inclus)                                   | —        |
 | `max_price` | prix maximum (inclus)                                   | —        |
+| `category_id` | annonces d'une catégorie                              | —        |
+| `user_id`   | annonces d'un vendeur                                   | —        |
+| `favorites` | `1` : favoris de l'utilisateur connecté (`401` sans session) | —   |
 | `sort`      | `recent`, `price-asc` ou `price-desc`                   | `recent` |
 | `page`      | numéro de page (≥ 1)                                    | `1`      |
 | `limit`     | articles par page (1 à 100)                             | `20`     |
@@ -466,6 +537,8 @@ Réponse :
 ```http
 PUT /api/articles/3
 ```
+
+`category_id` (ou `null`) et `badge_ids` (liste d'au plus 10 identifiants) sont optionnels, à la création comme à la modification. Sans `badge_ids`, les badges de l'annonce ne changent pas.
 
 Body (mêmes règles de validation que la création) :
 
@@ -966,8 +1039,7 @@ Le développeur n'a donc plus besoin de construire manuellement l'image ou de d�
 Une fois le projet fonctionnel, possibilité d'ajouter :
 
 * limitation des tentatives de connexion
-* réinitialisation du mot de passe
-* catégories
+* réinitialisation du mot de passe (mot de passe oublié)
 * statut vendu/disponible
 * tests d'intégration
 * tests end-to-end

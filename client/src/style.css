@@ -22,8 +22,6 @@
 
 * { box-sizing: border-box; }
 
-[hidden] { display: none !important; }
-
 body {
   margin: 0;
   font-family: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
@@ -95,8 +93,6 @@ h2 { font-size: 1.25rem; font-weight: 600; line-height: 1.3; }
 .header-search { flex: 1; max-width: 480px; }
 
 .header-actions { flex: none; display: flex; align-items: center; gap: 18px; margin-left: auto; min-width: 0; }
-.header-user { display: inline-flex; align-items: center; gap: 6px; max-width: 200px; white-space: nowrap; }
-.header-user span { overflow: hidden; text-overflow: ellipsis; }
 
 .input.search {
   padding-left: 40px;
@@ -109,7 +105,6 @@ h2 { font-size: 1.25rem; font-weight: 600; line-height: 1.3; }
 @media (max-width: 759px) {
   .header-inner { flex-wrap: wrap; gap: 0 16px; padding-top: 12px; padding-bottom: 12px; min-height: 0; }
   .header-search { order: 3; flex: 1 0 100%; max-width: none; margin-top: 12px; }
-  .header-user { display: none; }
   .logo-name { font-size: 1.25rem; }
 }
 
@@ -366,8 +361,20 @@ textarea.input { height: auto; min-height: 108px; padding: 10px 12px; resize: ve
   font-weight: 600;
   line-height: 1.4;
 }
+/* Badges de la charte : Nouveau (charbon), Rare (rouge vintage), Vintage (crème). */
 .badge-new { background: var(--charcoal); color: var(--white); }
-.card-thumb .badge { position: absolute; left: 10px; top: 10px; }
+.badge-accent { background: var(--accent); color: var(--white); }
+.badge-cream { background: var(--cream); color: var(--charcoal); box-shadow: inset 0 0 0 1px var(--border-strong); }
+
+.badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.card-thumb .badges { position: absolute; left: 10px; top: 10px; right: 90px; }
+
+.category { font-size: 0.8125rem; font-weight: 500; color: var(--muted); }
+.card-body .category { margin-bottom: 2px; }
+
+/* Cœur des favoris : rempli en rouge vintage quand l'annonce est dans les favoris. */
+.card-fav { position: absolute; right: 10px; bottom: 10px; z-index: 1; }
+.is-favorite .icon { color: var(--accent); fill: currentColor; }
 
 .card-title {
   font-size: 1rem;
@@ -510,8 +517,15 @@ textarea.input { height: auto; min-height: 108px; padding: 10px 12px; resize: ve
 .dialog-form .dialog-actions { margin-top: 6px; }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
-.field label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 0.875rem; }
-.field label .icon { color: var(--muted); }
+.field label,
+.field-label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 0.875rem; }
+.field label .icon,
+.field-label .icon { color: var(--muted); }
+.field select.input { width: 100%; }
+
+.checks { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.checks .check { gap: 8px; font-weight: 400; cursor: pointer; }
+.check input { width: 16px; height: 16px; margin: 0; accent-color: var(--charcoal); }
 .label-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 
 .input[type="file"] { padding: 6px; font-size: 0.875rem; cursor: pointer; }
@@ -666,7 +680,8 @@ textarea.input { height: auto; min-height: 108px; padding: 10px 12px; resize: ve
   letter-spacing: -0.025em;
   overflow-wrap: anywhere;
 }
-.detail-info .badge { margin-bottom: 12px; }
+.detail-info .badges { margin-bottom: 12px; }
+.detail-info .category { margin-bottom: 4px; }
 .detail-price {
   margin: 12px 0 6px;
   font-size: 2rem;
@@ -759,6 +774,62 @@ textarea.input { height: auto; min-height: 108px; padding: 10px 12px; resize: ve
 .stats dt { font-size: 0.875rem; color: var(--muted); }
 .stats dd { margin: 4px 0 0; font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 
+.profile-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
 .profile-listing-head { align-items: center; justify-content: space-between; }
+
+.favorites-empty { margin-top: 12px; }
+
+/* ---------- Administration ---------- */
+
+.admin-title { margin-top: 20px; font-size: 2rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.025em; }
+
+.admin-section { max-width: 760px; margin-top: 36px; padding-top: 28px; border-top: 1px solid var(--border); }
+.admin-section > .muted { margin-top: 4px; }
+
+.chips { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; padding: 0; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+.chip-remove {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.chip-remove:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); }
+.chip-remove:focus-visible { outline: 2px solid var(--charcoal); outline-offset: 1px; }
+.chip-remove:disabled { cursor: not-allowed; opacity: 0.45; }
+
+.inline-form { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.inline-form .input:not(select) { flex: 1; min-width: 200px; }
+
+.admin-error { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 16px; }
+
+.user-list { list-style: none; margin: 16px 0 0; padding: 0; border-top: 1px solid var(--border); }
+.user-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.user-identity { min-width: 0; }
+.user-email { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-weight: 600; overflow-wrap: anywhere; }
 
 .state h1.state-title { line-height: 1.3; }

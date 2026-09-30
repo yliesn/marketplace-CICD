@@ -183,3 +183,52 @@ describe('POST /api/auth/logout', () => {
     expect(db.query).not.toHaveBeenCalled();
   });
 });
+
+describe('POST /api/auth/password', () => {
+  const change = (body) => request(app).post('/api/auth/password').set('Cookie', 'sid=jeton').send(body);
+
+  it('change le mot de passe et ferme les autres sessions', async () => {
+    const password_hash = await hashPassword('ancien-mot-de-passe');
+    db.query
+      .mockResolvedValueOnce({ rows: [account] }) // session
+      .mockResolvedValueOnce({ rows: [{ password_hash }] })
+      .mockResolvedValue({ rows: [] });
+
+    const res = await change({ current_password: 'ancien-mot-de-passe', new_password: 'nouveau-mot-de-passe' });
+
+    expect(res.status).toBe(204);
+    const [updateSql, updateParams] = db.query.mock.calls[2];
+    expect(updateSql).toMatch(/UPDATE users SET password_hash/);
+    expect(await verifyPassword('nouveau-mot-de-passe', updateParams[0])).toBe(true);
+    expect(updateParams[1]).toBe(account.id);
+
+    const [deleteSql, deleteParams] = db.query.mock.calls[3];
+    expect(deleteSql).toMatch(/DELETE FROM sessions WHERE user_id = \$1 AND token_hash <> \$2/);
+    expect(deleteParams[0]).toBe(account.id);
+  });
+
+  it("refuse si l'ancien mot de passe est incorrect", async () => {
+    const password_hash = await hashPassword('ancien-mot-de-passe');
+    db.query.mockResolvedValueOnce({ rows: [account] }).mockResolvedValueOnce({ rows: [{ password_hash }] });
+
+    const res = await change({ current_password: 'mauvais', new_password: 'nouveau-mot-de-passe' });
+
+    expect(res.status).toBe(403);
+    expect(db.query).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['sans ancien mot de passe', { new_password: 'nouveau-mot-de-passe' }],
+    ['nouveau mot de passe trop court', { current_password: 'ancien-mot-de-passe', new_password: 'court' }],
+  ])('refuse une demande invalide (%s)', async (_, body) => {
+    db.query.mockResolvedValueOnce({ rows: [account] });
+    const res = await change(body);
+    expect(res.status).toBe(400);
+    expect(db.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuse un visiteur non connecté', async () => {
+    const res = await request(app).post('/api/auth/password').send({ current_password: 'a', new_password: 'nouveau-mot-de-passe' });
+    expect(res.status).toBe(401);
+  });
+});

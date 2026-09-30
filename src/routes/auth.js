@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const sessions = require('../sessions');
-const { hashPassword, verifyPassword, setSessionCookie, clearSessionCookie } = require('../auth');
+const { hashPassword, verifyPassword, setSessionCookie, clearSessionCookie, requireAuth } = require('../auth');
 
 const router = express.Router();
 
@@ -84,6 +84,30 @@ router.post('/logout', async (req, res, next) => {
   try {
     if (req.sessionToken) await sessions.destroy(req.sessionToken);
     clearSessionCookie(req, res);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Changement de mot de passe : l'ancien est exigé, et les autres sessions sont fermées.
+router.post('/password', requireAuth, async (req, res, next) => {
+  const { current_password: currentPassword, new_password: newPassword } = req.body || {};
+  if (typeof currentPassword !== 'string' || currentPassword === '' || currentPassword.length > MAX_PASSWORD) {
+    return res.status(400).json({ errors: ['current_password est obligatoire'] });
+  }
+  if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD || newPassword.length > MAX_PASSWORD) {
+    return res.status(400).json({ errors: [`new_password doit contenir entre ${MIN_PASSWORD} et ${MAX_PASSWORD} caractères`] });
+  }
+
+  try {
+    const { rows } = await db.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
+    if (rows.length === 0 || !(await verifyPassword(currentPassword, rows[0].password_hash))) {
+      return res.status(403).json({ error: 'Mot de passe actuel incorrect' });
+    }
+
+    await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [await hashPassword(newPassword), req.user.id]);
+    await sessions.destroyOthers(req.user.id, req.sessionToken);
     res.status(204).end();
   } catch (err) {
     next(err);

@@ -32,8 +32,13 @@ async function destroy(token) {
   await db.query('DELETE FROM sessions WHERE token_hash = $1', [hashToken(token)]);
 }
 
+// Ferme les autres sessions d'un utilisateur (après un changement de mot de passe).
+async function destroyOthers(userId, token) {
+  await db.query('DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2', [userId, hashToken(token)]);
+}
+
 async function purgeExpired() {
   await db.query('DELETE FROM sessions WHERE expires_at <= NOW()');
 }
 
-module.exports = { SESSION_TTL_MS, create, findUser, destroy, purgeExpired };
+module.exports = { SESSION_TTL_MS, create, findUser, destroy, destroyOthers, purgeExpired };

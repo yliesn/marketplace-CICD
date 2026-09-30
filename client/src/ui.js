@@ -88,14 +88,39 @@ export function onGone() {
   changed('deleted');
 }
 
+// ---------- Favoris ----------
+
+// Incrémenté à chaque ajout ou retrait : le profil recharge alors sa liste « Mes favoris ».
+export const favoritesVersion = ref(0);
+
+export async function toggleFavorite(article) {
+  if (!auth.user) {
+    showToast('Connectez-vous pour garder vos objets favoris', 'error');
+    router.push({ name: 'login', query: { suite: router.currentRoute.value.fullPath } });
+    return;
+  }
+
+  const wanted = !article.is_favorite;
+  article.is_favorite = wanted; // affiché tout de suite, annulé en cas d'échec
+  try {
+    const res = await fetch(`/api/articles/${article.id}/favorite`, { method: wanted ? 'PUT' : 'DELETE' });
+    if (res.status === 401) auth.user = null;
+    if (!res.ok) throw new Error(res.statusText);
+    favoritesVersion.value += 1;
+  } catch {
+    article.is_favorite = !wanted;
+    showToast("Le favori n'a pas pu être enregistré", 'error');
+  }
+}
+
 // ---------- Suppression ----------
 
-export const confirmState = reactive({ target: null, resolve: null });
+export const confirmState = reactive({ open: false, title: '', message: '', resolve: null });
 
-function confirmDelete(article) {
+// Affiche la fenêtre de confirmation. Résolue à true si la suppression est confirmée.
+export function confirmDelete(title, message) {
   return new Promise((resolve) => {
-    confirmState.target = article;
-    confirmState.resolve = resolve;
+    Object.assign(confirmState, { open: true, title, message, resolve });
   });
 }
 
@@ -103,7 +128,8 @@ export const removingId = ref(null);
 
 // Demande confirmation puis supprime. Retourne true si l'annonce a été supprimée.
 export async function deleteArticle(article) {
-  if (!(await confirmDelete(article))) return false;
+  const confirmed = await confirmDelete('Supprimer cette annonce ?', `« ${article.title} » sera définitivement supprimée.`);
+  if (!confirmed) return false;
 
   removingId.value = article.id;
   try {
