@@ -5,7 +5,7 @@ metadata:
   namespace: marketplace
 spec:
   rules:
-    - host: marketplace.nejara.fr
+    - host: develop.nejara.fr
       http:
         paths:
           - path: /
