@@ -42,7 +42,7 @@ router.post('/register', async (req, res, next) => {
 
   try {
     const { rows } = await db.query(
-      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, role',
+      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, role, created_at',
       [email, await hashPassword(password)]
     );
     await openSession(req, res, rows[0]);
@@ -63,7 +63,7 @@ router.post('/login', async (req, res, next) => {
 
   try {
     const { rows } = await db.query(
-      'SELECT id, email, role, password_hash FROM users WHERE email = $1',
+      'SELECT id, email, role, created_at, password_hash FROM users WHERE email = $1',
       [email]
     );
     const valid = await verifyPassword(password, rows.length ? rows[0].password_hash : await dummyHash);

@@ -19,7 +19,7 @@ async function create(userId) {
 
 async function findUser(token) {
   const { rows } = await db.query(
-    `SELECT u.id, u.email, u.role
+    `SELECT u.id, u.email, u.role, u.created_at
      FROM sessions s
      JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = $1 AND s.expires_at > NOW()`,

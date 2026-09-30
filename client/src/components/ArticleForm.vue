@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { imageUrl } from '../format';
+import Icon from './Icon.vue';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
@@ -171,17 +172,17 @@ async function onSubmit() {
   <dialog ref="dialog" class="dialog dialog-form" aria-labelledby="publish-title" @close="$emit('cancel')">
     <div class="dialog-head">
       <div>
-        <h2 id="publish-title">{{ isEdit ? "Modifier l'annonce" : 'Déposer une annonce' }}</h2>
+        <h2 id="publish-title">{{ isEdit ? "Modifier l'annonce" : 'Mettre un objet en vente' }}</h2>
         <p class="muted small">
           {{ isEdit ? 'Les modifications sont visibles immédiatement.' : 'Elle sera visible immédiatement par tout le monde.' }}
         </p>
       </div>
-      <button class="btn btn-link" type="button" @click="$emit('cancel')">Fermer</button>
+      <button class="icon-btn" type="button" aria-label="Fermer" title="Fermer" @click="$emit('cancel')"><Icon name="x" size="18" /></button>
     </div>
 
     <form novalidate @submit.prevent="onSubmit">
       <div class="field">
-        <label for="title">Titre</label>
+        <label for="title"><Icon name="tag" />Titre</label>
         <input
           id="title"
           v-model="fields.title"
@@ -190,7 +191,7 @@ async function onSubmit() {
           class="input"
           type="text"
           maxlength="255"
-          placeholder="Ex. Clavier mécanique"
+          placeholder="Ex. Figurine Star Wars de 1995"
           required
           :aria-invalid="errors.title ? 'true' : 'false'"
           @input="errors.title = ''"
@@ -200,7 +201,7 @@ async function onSubmit() {
 
       <div class="field">
         <div class="label-row">
-          <label for="description">Description</label>
+          <label for="description"><Icon name="text" />Description</label>
           <span class="muted small">{{ fields.description.length }} / 500</span>
         </div>
         <textarea
@@ -210,13 +211,13 @@ async function onSubmit() {
           class="input"
           rows="4"
           maxlength="500"
-          placeholder="État, caractéristiques, remise en main propre…"
+          placeholder="État, année, emballage d'origine, histoire de l'objet…"
         />
       </div>
 
       <div class="field">
         <div class="label-row">
-          <label for="image">Photo</label>
+          <label for="image"><Icon name="camera" />Photo</label>
           <span class="muted small">JPEG, PNG ou WebP · 2 Mo max</span>
         </div>
         <input
@@ -231,13 +232,13 @@ async function onSubmit() {
         >
         <div v-if="previewSrc" class="image-preview">
           <img :src="previewSrc" alt="Aperçu de la photo">
-          <button class="btn btn-ghost btn-sm" type="button" @click="onRemoveImage">Retirer la photo</button>
+          <button class="btn btn-ghost btn-sm" type="button" @click="onRemoveImage"><Icon name="trash" />Retirer la photo</button>
         </div>
         <p class="field-error">{{ errors.image }}</p>
       </div>
 
       <div class="field">
-        <label for="price">Prix</label>
+        <label for="price"><Icon name="euro" />Prix</label>
         <div class="input-suffix">
           <input
             id="price"
@@ -261,7 +262,7 @@ async function onSubmit() {
       <p v-if="formError" class="alert" role="alert">{{ formError }}</p>
 
       <div class="dialog-actions">
-        <button class="btn btn-ghost" type="button" @click="$emit('cancel')">Annuler</button>
+        <button class="btn btn-secondary" type="button" @click="$emit('cancel')">Annuler</button>
         <button class="btn btn-primary" type="submit" :disabled="submitting">{{ submitLabel }}</button>
       </div>
     </form>

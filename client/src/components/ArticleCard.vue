@@ -1,6 +1,8 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { formatDate, formatPrice, imageUrl, timeAgo } from '../format';
+import { RouterLink } from 'vue-router';
+import Icon from './Icon.vue';
 
 const NEW_BADGE_MS = 24 * 60 * 60 * 1000;
 
@@ -29,18 +31,23 @@ const isNew = computed(() => Date.now() - new Date(props.article.created_at) < N
         loading="lazy"
         @error="imageFailed = true"
       >
-      <svg v-else viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="3" y="4" width="18" height="16" rx="1.5" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="m21 16-5-5L5 20" />
-      </svg>
-      <span v-if="isNew" class="badge">Nouveau</span>
+      <Icon v-else name="image" size="36" />
+      <span v-if="isNew" class="badge badge-new">Nouveau</span>
     </div>
 
-    <h3 class="card-title">{{ article.title }}</h3>
-    <p class="price">{{ formatPrice(article.price) }}</p>
-    <p v-if="article.description" class="card-desc">{{ article.description }}</p>
-    <time class="date" :datetime="article.created_at" :title="formatDate(article.created_at)">
-      {{ timeAgo(article.created_at) }}
-    </time>
+    <div class="card-body">
+      <h3 class="card-title">
+        <!-- Le lien s'étend à toute la carte (voir .card-link::after). -->
+        <RouterLink class="card-link" :to="{ name: 'article', params: { id: article.id } }">{{ article.title }}</RouterLink>
+      </h3>
+      <p v-if="article.description" class="card-desc">{{ article.description }}</p>
+      <div class="card-foot">
+        <p class="price">{{ formatPrice(article.price) }}</p>
+        <time class="date" :datetime="article.created_at" :title="formatDate(article.created_at)">
+          <Icon name="clock" size="13" />{{ timeAgo(article.created_at) }}
+        </time>
+      </div>
+    </div>
 
     <div v-if="canEdit" class="card-actions">
       <button

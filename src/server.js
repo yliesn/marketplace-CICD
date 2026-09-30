@@ -12,6 +12,7 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'dist')));
 
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
@@ -22,6 +23,13 @@ app.use('/api/articles', articlesRouter);
 
 app.use('/api', (req, res) => {
   res.status(404).json({ error: 'Route introuvable' });
+});
+
+// Les autres adresses (/objet/12, /profil, /connexion…) sont des pages gérées côté client
+// par vue-router (voir client/src/router.js) : on sert l'application, qui affiche la bonne page.
+app.get('*', (req, res, next) => {
+  if (path.extname(req.path)) return next(); // fichier statique manquant : vraie 404
+  res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
 });
 
 // eslint-disable-next-line no-unused-vars

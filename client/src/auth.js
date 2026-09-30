@@ -24,6 +24,13 @@ export async function fetchMe() {
   }
 }
 
+// Résolue une fois la session vérifiée : le routeur l'attend avant de protéger une page.
+let ready;
+export function authReady() {
+  ready ??= fetchMe();
+  return ready;
+}
+
 export function login(email, password) {
   return send('login', { email, password });
 }

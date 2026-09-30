@@ -126,6 +126,9 @@ function parseListQuery(query) {
   }
   filters.sort = Object.hasOwn(SORTS, sort) ? sort : 'recent';
 
+  // Annonces d'un vendeur donné (page profil, « du même vendeur »).
+  filters.userId = optionalInt('user_id', 1, 2147483647, undefined);
+
   filters.page = optionalInt('page', 1, 100000, 1);
   filters.limit = optionalInt('limit', 1, MAX_LIMIT, DEFAULT_LIMIT);
 
@@ -154,6 +157,10 @@ router.get('/', async (req, res, next) => {
   if (filters.maxPrice !== undefined) {
     params.push(filters.maxPrice);
     where.push(`price <= $${params.length}`);
+  }
+  if (filters.userId !== undefined) {
+    params.push(filters.userId);
+    where.push(`user_id = $${params.length}`);
   }
 
   params.push(filters.limit, (filters.page - 1) * filters.limit);
@@ -197,7 +204,10 @@ router.get('/:id', async (req, res, next) => {
 
   try {
     const { rows } = await db.query(
-      `SELECT id, title, description, price, created_at, user_id, i.updated_at AS image_updated_at
+      // Le vendeur reste anonyme : on n'expose que son ancienneté et son nombre d'annonces.
+      `SELECT id, title, description, price, created_at, user_id, i.updated_at AS image_updated_at,
+              (SELECT users.created_at FROM users WHERE users.id = articles.user_id) AS seller_since,
+              (SELECT COUNT(*)::int FROM articles others WHERE others.user_id = articles.user_id) AS seller_count
        FROM articles
        LEFT JOIN article_images i ON i.article_id = articles.id
        WHERE id = $1`,

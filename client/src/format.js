@@ -6,6 +6,13 @@ export function formatPrice(value) {
   return priceFormat.format(Number(value));
 }
 
+const monthFormat = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' });
+
+// « septembre 2026 »
+export function formatMonth(value) {
+  return monthFormat.format(new Date(value));
+}
+
 export function formatDate(value) {
   return dateFormat.format(new Date(value));
 }
