@@ -9,7 +9,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: marketplace.nejara.fr
+    - host: develop.nejara.fr
       http:
         paths:
           - path: /
@@ -21,4 +21,4 @@ spec:
                   number: 3000
   tls:
     - hosts:
-        - marketplace.nejara.fr
+        - develop.nejara.fr
