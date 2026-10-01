@@ -1,16 +1,56 @@
 const express = require('express');
 const db = require('../db');
+const { requireAuth } = require('../auth');
+const { parseId } = require('../params');
 
 const router = express.Router();
 
-function parseId(value) {
-  const id = Number(value);
-  return Number.isInteger(id) && id > 0 ? id : null;
+const MAX_BADGES = 10;
+
+// Colonnes renvoyées pour une annonce. `isFavorite` est l'expression SQL qui indique
+// si elle fait partie des favoris de l'utilisateur connecté.
+function articleColumns(isFavorite) {
+  return `id, title, description, price, created_at, user_id, category_id,
+          i.updated_at AS image_updated_at,
+          ARRAY(SELECT badge_id FROM article_badges WHERE article_id = articles.id ORDER BY badge_id) AS badge_ids,
+          ${isFavorite} AS is_favorite`;
+}
+
+function favoriteOf(userParam) {
+  return `EXISTS (SELECT 1 FROM favorites f WHERE f.article_id = articles.id AND f.user_id = ${userParam})`;
+}
+
+// Remplace les badges d'une annonce ; les identifiants inconnus sont ignorés.
+async function saveBadges(articleId, badgeIds) {
+  await db.query(
+    `WITH removed AS (
+       DELETE FROM article_badges WHERE article_id = $1::int AND NOT (badge_id = ANY($2::int[]))
+     )
+     INSERT INTO article_badges (article_id, badge_id)
+     SELECT $1::int, id FROM badges WHERE id = ANY($2::int[])
+     ON CONFLICT DO NOTHING`,
+    [articleId, badgeIds]
+  );
+}
+
+// Vérifie que l'article existe et que l'utilisateur peut le modifier (son auteur ou un admin).
+// Répond 404 ou 403 et retourne false sinon.
+async function checkOwner(id, user, res) {
+  const { rows } = await db.query('SELECT user_id FROM articles WHERE id = $1', [id]);
+  if (rows.length === 0) {
+    res.status(404).json({ error: 'Article introuvable' });
+    return false;
+  }
+  if (user.role !== 'admin' && rows[0].user_id !== user.id) {
+    res.status(403).json({ error: 'Action non autorisée' });
+    return false;
+  }
+  return true;
 }
 
 function validateArticle(body) {
   const errors = [];
-  const { title, description, price } = body || {};
+  const { title, description, price, category_id: categoryId, badge_ids: badgeIds } = body || {};
 
   if (typeof title !== 'string' || title.trim() === '') {
     errors.push('title est obligatoire');
@@ -29,12 +69,26 @@ function validateArticle(body) {
     errors.push('price est trop élevé');
   }
 
+  const hasCategory = categoryId !== undefined && categoryId !== null && categoryId !== '';
+  if (hasCategory && parseId(categoryId) === null) {
+    errors.push('category_id doit être un identifiant valide');
+  }
+
+  // badge_ids absent : les badges de l'annonce ne changent pas.
+  if (badgeIds !== undefined && (
+    !Array.isArray(badgeIds) || badgeIds.length > MAX_BADGES || badgeIds.some((id) => parseId(id) === null)
+  )) {
+    errors.push(`badge_ids doit être une liste d'au plus ${MAX_BADGES} identifiants`);
+  }
+
   return {
     errors,
     article: {
       title: typeof title === 'string' ? title.trim() : title,
       description: typeof description === 'string' ? description.trim() : '',
       price: priceNumber,
+      categoryId: hasCategory ? parseId(categoryId) : null,
+      badgeIds: Array.isArray(badgeIds) ? badgeIds.map(parseId) : undefined,
     },
   };
 }
@@ -48,7 +102,7 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const imageBody = express.raw({ type: IMAGE_TYPES, limit: MAX_IMAGE_SIZE });
 
 // Vérifie que le contenu correspond bien au type annoncé (signature du fichier).
@@ -110,6 +164,13 @@ function parseListQuery(query) {
   }
   filters.sort = Object.hasOwn(SORTS, sort) ? sort : 'recent';
 
+  // Annonces d'un vendeur donné (page profil, « du même vendeur »).
+  filters.userId = optionalInt('user_id', 1, 2147483647, undefined);
+  filters.categoryId = optionalInt('category_id', 1, 2147483647, undefined);
+
+  // Favoris de l'utilisateur connecté (page profil).
+  filters.favorites = query.favorites === '1' || query.favorites === 'true';
+
   filters.page = optionalInt('page', 1, 100000, 1);
   filters.limit = optionalInt('limit', 1, MAX_LIMIT, DEFAULT_LIMIT);
 
@@ -123,6 +184,7 @@ function escapeLike(value) {
 router.get('/', async (req, res, next) => {
   const { errors, filters } = parseListQuery(req.query);
   if (errors.length > 0) return res.status(400).json({ errors });
+  if (filters.favorites && !req.user) return res.status(401).json({ error: 'Authentification requise' });
 
   const where = [];
   const params = [];
@@ -139,11 +201,31 @@ router.get('/', async (req, res, next) => {
     params.push(filters.maxPrice);
     where.push(`price <= $${params.length}`);
   }
+  if (filters.userId !== undefined) {
+    params.push(filters.userId);
+    where.push(`user_id = $${params.length}`);
+  }
+  if (filters.categoryId !== undefined) {
+    params.push(filters.categoryId);
+    where.push(`category_id = $${params.length}`);
+  }
+  if (filters.favorites) {
+    params.push(req.user.id);
+    where.push(favoriteOf(`$${params.length}`));
+  }
+
+  const whereParams = [...params];
+
+  let isFavorite = 'FALSE';
+  if (req.user) {
+    params.push(req.user.id);
+    isFavorite = favoriteOf(`$${params.length}`);
+  }
 
   params.push(filters.limit, (filters.page - 1) * filters.limit);
 
   const sql = `
-    SELECT id, title, description, price, created_at, i.updated_at AS image_updated_at,
+    SELECT ${articleColumns(isFavorite)},
            COUNT(*) OVER() AS total_count
     FROM articles
     LEFT JOIN article_images i ON i.article_id = articles.id
@@ -158,7 +240,7 @@ router.get('/', async (req, res, next) => {
     if (!rows.length && filters.page > 1) {
       // Page hors limites : on récupère quand même le total pour la pagination.
       const countSql = `SELECT COUNT(*) AS total FROM articles ${where.length ? `WHERE ${where.join(' AND ')}` : ''}`;
-      const count = await db.query(countSql, params.slice(0, -2));
+      const count = await db.query(countSql, whereParams);
       total = Number(count.rows[0].total);
     }
 
@@ -179,13 +261,18 @@ router.get('/:id', async (req, res, next) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: 'id invalide' });
 
+  const params = req.user ? [id, req.user.id] : [id];
+
   try {
     const { rows } = await db.query(
-      `SELECT id, title, description, price, created_at, i.updated_at AS image_updated_at
+      // Le vendeur reste anonyme : on n'expose que son ancienneté et son nombre d'annonces.
+      `SELECT ${articleColumns(req.user ? favoriteOf('$2') : 'FALSE')},
+              (SELECT users.created_at FROM users WHERE users.id = articles.user_id) AS seller_since,
+              (SELECT COUNT(*)::int FROM articles others WHERE others.user_id = articles.user_id) AS seller_count
        FROM articles
        LEFT JOIN article_images i ON i.article_id = articles.id
        WHERE id = $1`,
-      [id]
+      params
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Article introuvable' });
     res.json(rows[0]);
@@ -216,7 +303,7 @@ router.get('/:id/image', async (req, res, next) => {
   }
 });
 
-router.put('/:id/image', imageBody, async (req, res, next) => {
+router.put('/:id/image', requireAuth, imageBody, async (req, res, next) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: 'id invalide' });
 
@@ -229,6 +316,8 @@ router.put('/:id/image', imageBody, async (req, res, next) => {
   }
 
   try {
+    if (!(await checkOwner(id, req.user, res))) return;
+
     const { rows } = await db.query(
       `INSERT INTO article_images (article_id, content_type, data) VALUES ($1, $2, $3)
        ON CONFLICT (article_id) DO UPDATE
@@ -238,17 +327,19 @@ router.put('/:id/image', imageBody, async (req, res, next) => {
     );
     res.json(rows[0]);
   } catch (err) {
-    // Violation de clé étrangère : l'article n'existe pas.
+    // Violation de clé étrangère : l'article a été supprimé entre-temps.
     if (err.code === '23503') return res.status(404).json({ error: 'Article introuvable' });
     next(err);
   }
 });
 
-router.delete('/:id/image', async (req, res, next) => {
+router.delete('/:id/image', requireAuth, async (req, res, next) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: 'id invalide' });
 
   try {
+    if (!(await checkOwner(id, req.user, res))) return;
+
     const { rowCount } = await db.query('DELETE FROM article_images WHERE article_id = $1', [id]);
     if (rowCount === 0) return res.status(404).json({ error: 'Image introuvable' });
     res.status(204).end();
@@ -257,22 +348,30 @@ router.delete('/:id/image', async (req, res, next) => {
   }
 });
 
-router.post('/', async (req, res, next) => {
+// Violation de clé étrangère à l'enregistrement : la catégorie choisie n'existe pas.
+function unknownCategory(res) {
+  return res.status(400).json({ errors: ['category_id ne correspond à aucune catégorie'] });
+}
+
+router.post('/', requireAuth, async (req, res, next) => {
   const { errors, article } = validateArticle(req.body);
   if (errors.length > 0) return res.status(400).json({ errors });
 
   try {
     const { rows } = await db.query(
-      'INSERT INTO articles (title, description, price) VALUES ($1, $2, $3) RETURNING id, title, description, price, created_at',
-      [article.title, article.description, article.price]
+      `INSERT INTO articles (title, description, price, user_id, category_id) VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, title, description, price, created_at, user_id, category_id`,
+      [article.title, article.description, article.price, req.user.id, article.categoryId]
     );
+    if (article.badgeIds) await saveBadges(rows[0].id, article.badgeIds);
     res.status(201).json(rows[0]);
   } catch (err) {
+    if (err.code === '23503') return unknownCategory(res);
     next(err);
   }
 });
 
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', requireAuth, async (req, res, next) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: 'id invalide' });
 
@@ -280,22 +379,60 @@ router.put('/:id', async (req, res, next) => {
   if (errors.length > 0) return res.status(400).json({ errors });
 
   try {
+    if (!(await checkOwner(id, req.user, res))) return;
+
     const { rows } = await db.query(
-      'UPDATE articles SET title = $1, description = $2, price = $3 WHERE id = $4 RETURNING id, title, description, price, created_at',
-      [article.title, article.description, article.price, id]
+      `UPDATE articles SET title = $1, description = $2, price = $3, category_id = $4 WHERE id = $5
+       RETURNING id, title, description, price, created_at, user_id, category_id`,
+      [article.title, article.description, article.price, article.categoryId, id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Article introuvable' });
+    if (article.badgeIds) await saveBadges(id, article.badgeIds);
     res.json(rows[0]);
+  } catch (err) {
+    if (err.code === '23503') return unknownCategory(res);
+    next(err);
+  }
+});
+
+// ---------- Favoris ----------
+
+router.put('/:id/favorite', requireAuth, async (req, res, next) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'id invalide' });
+
+  try {
+    await db.query(
+      'INSERT INTO favorites (user_id, article_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [req.user.id, id]
+    );
+    res.status(204).end();
+  } catch (err) {
+    // Violation de clé étrangère : l'article n'existe pas.
+    if (err.code === '23503') return res.status(404).json({ error: 'Article introuvable' });
+    next(err);
+  }
+});
+
+router.delete('/:id/favorite', requireAuth, async (req, res, next) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'id invalide' });
+
+  try {
+    await db.query('DELETE FROM favorites WHERE user_id = $1 AND article_id = $2', [req.user.id, id]);
+    res.status(204).end();
   } catch (err) {
     next(err);
   }
 });
 
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', requireAuth, async (req, res, next) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: 'id invalide' });
 
   try {
+    if (!(await checkOwner(id, req.user, res))) return;
+
     const { rowCount } = await db.query('DELETE FROM articles WHERE id = $1', [id]);
     if (rowCount === 0) return res.status(404).json({ error: 'Article introuvable' });
     res.status(204).end();

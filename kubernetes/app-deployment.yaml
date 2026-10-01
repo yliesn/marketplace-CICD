@@ -44,6 +44,18 @@ spec:
                 secretKeyRef:
                   name: marketplace-db
                   key: DB_NAME
+            - name: ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: marketplace-db
+                  key: ADMIN_EMAIL
+                  optional: true
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: marketplace-db
+                  key: ADMIN_PASSWORD
+                  optional: true
           readinessProbe:
             httpGet:
               path: /health

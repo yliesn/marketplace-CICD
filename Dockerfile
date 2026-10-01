@@ -1,3 +1,14 @@
+FROM node:20-alpine AS build
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY vite.config.mjs ./
+COPY client ./client
+RUN npm run build
+
 FROM node:20-alpine
 
 ENV NODE_ENV=production
@@ -7,6 +18,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY src ./src
+COPY --from=build /app/dist ./dist
 
 USER node
 EXPOSE 3000
