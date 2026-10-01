@@ -31,8 +31,9 @@ L'objectif principal du projet n'est pas de créer une marketplace complète, ma
 11. [Registry Docker](#-registry-docker)
 12. [Kubernetes](#-kubernetes)
 13. [CI/CD](#-cicd)
-14. [Étapes du pipeline](#-étapes-du-pipeline)
-15. [Évolutions possibles](#-évolutions-possibles)
+14. [Versioning](#️-versioning)
+15. [Étapes du pipeline](#-étapes-du-pipeline)
+16. [Évolutions possibles](#-évolutions-possibles)
 
 ---
 
@@ -799,6 +800,37 @@ Le pipeline GitHub Actions doit automatiser le cycle suivant :
 
 ---
 
+# 🏷️ Versioning
+
+Les versions sont gérées automatiquement par [semantic-release](https://semantic-release.gitbook.io/) (config : `.releaserc.json`).
+
+À chaque push sur `main`, le job `release` analyse les commits depuis le dernier tag et calcule la version suivante selon [Conventional Commits](https://www.conventionalcommits.org/fr/) :
+
+| Commit | Exemple | Effet |
+|---|---|---|
+| `fix:` | `fix(auth): corrige l'expiration de session` | patch `1.0.0 → 1.0.1` |
+| `feat:` | `feat(catalog): ajoute le filtre par prix` | minor `1.0.0 → 1.1.0` |
+| `feat!:` ou `BREAKING CHANGE:` dans le corps | `feat!: nouveau format d'API` | major `1.0.0 → 2.0.0` |
+| `docs:`, `chore:`, `ci:`, `test:`, `refactor:`… | `docs: maj readme` | aucune release |
+
+Les commits qui ne respectent pas ce format (`vue`, `merge`…) sont ignorés.
+
+Quand une version est publiée :
+
+1. le tag `vX.Y.Z` et la GitHub Release (avec les notes générées) sont créés ;
+2. l'image Docker est poussée avec le tag `X.Y.Z` en plus de `<commit-sha>` et `latest` ;
+3. le CD déploie l'image `X.Y.Z` (ou `<commit-sha>` si le commit n'a pas produit de release).
+
+Les branches autres que `main` (`develop`, PR) ne publient aucune version.
+
+Simulation locale (ne publie rien, nécessite un `GITHUB_TOKEN`) :
+
+```bash
+GITHUB_TOKEN=<token> npx semantic-release --dry-run --no-ci
+```
+
+---
+
 # 🔨 Étapes du pipeline
 
 ## 1. Checkout
@@ -1046,7 +1078,6 @@ Une fois le projet fonctionnel, possibilité d'ajouter :
 * SonarQube
 * analyse de sécurité
 * scan de l'image Docker
-* gestion des versions
 * rollback Kubernetes
 * Helm
 * Ingress

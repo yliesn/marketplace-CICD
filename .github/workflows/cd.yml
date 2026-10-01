@@ -19,6 +19,19 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Resolve image tag
+        id: image
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          TAG=$(git tag --points-at HEAD --list 'v*' | head -n1)
+          if [ -n "$TAG" ]; then
+            echo "tag=${TAG#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Copy Kubernetes manifests to VPS
         uses: appleboy/scp-action@v0.1.7
@@ -33,7 +46,7 @@ jobs:
       - name: Deploy to K3s
         uses: appleboy/ssh-action@v1.2.2
         env:
-          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}

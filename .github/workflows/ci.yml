@@ -36,10 +36,52 @@ jobs:
       - name: Run tests
         run: npm test
 
+  release:
+    name: Semantic Release
+    runs-on: self-hosted
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    concurrency: release
+
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run semantic-release
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get released version
+        id: version
+        run: |
+          TAG=$(git tag --points-at HEAD --list 'v*' | head -n1)
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
   docker:
     name: Build & Push Docker
     runs-on: self-hosted
-    needs: test
+    needs: [test, release]
+    if: ${{ !failure() && !cancelled() }}
 
     steps:
       - name: Checkout
@@ -60,3 +102,4 @@ jobs:
           tags: |
             ghcr.io/yliesn/marketplace:${{ github.sha }}
             ghcr.io/yliesn/marketplace:latest
+            ${{ needs.release.outputs.version && format('ghcr.io/yliesn/marketplace:{0}', needs.release.outputs.version) || '' }}
