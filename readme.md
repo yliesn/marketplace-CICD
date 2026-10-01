@@ -1,4 +1,4 @@
-# Marketplace — Projet CI/CD
+#   Marketplace — Projet CI/CD
 
 Mini application web permettant de publier et de consulter des articles à vendre.
 
