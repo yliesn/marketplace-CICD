@@ -73,7 +73,7 @@ function onConfirmClose() {
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <span class="footer-brand"><Logo symbol-only height="26" />The Collector.</span>
+      <span class="footer-brand"><Logo symbol-only height="26" />The Collector .</span>
       <span>Les objets ont une histoire.</span>
     </div>
   </footer>
