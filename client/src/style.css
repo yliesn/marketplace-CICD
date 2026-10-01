@@ -222,6 +222,29 @@ textarea.input { height: auto; min-height: 108px; padding: 10px 12px; resize: ve
 
 .input[aria-invalid="true"] { border-color: var(--danger); }
 
+/* Champ mot de passe avec bouton « afficher » (le bouton natif d'Edge est masqué pour ne pas faire doublon). */
+.password-input { position: relative; }
+.password-input .input { padding-right: 48px; }
+.password-input .input::-ms-reveal { display: none; }
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 34px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.password-toggle:hover { background: var(--cream); color: var(--charcoal); }
+.password-toggle:focus-visible { outline: 2px solid var(--charcoal); outline-offset: 0; }
+.password-toggle[aria-pressed="true"] { color: var(--charcoal); }
+
 .input-suffix { position: relative; }
 .input-suffix .input { padding-right: 30px; }
 .input-suffix span {

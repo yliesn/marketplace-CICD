@@ -56,24 +56,51 @@ CREATE TABLE IF NOT EXISTS favorites (
 INSERT INTO categories (name) VALUES ('Figurines'), ('Jeux vidéo'), ('Cartes'), ('Affiches');
 INSERT INTO badges (name, style) VALUES ('Rare', 'accent'), ('Vintage', 'cream');
 
-INSERT INTO articles (title, description, price, created_at) VALUES
-  ('Clavier mécanique', 'Clavier en très bon état', 45.00, NOW() - INTERVAL '2 hours'),
-  ('Écran 24 pouces', 'Écran Full HD', 90.00, NOW() - INTERVAL '5 hours'),
-  ('Vélo de route Triban 520', 'Taille M, révisé en juin, pneus neufs.', 340.00, NOW() - INTERVAL '9 hours'),
-  ('Canapé 3 places en tissu gris', 'Déhoussable, très bon état. À venir chercher sur place.', 180.00, NOW() - INTERVAL '14 hours'),
-  ('iPhone 13 128 Go', 'Batterie à 89 %, aucune rayure, vendu avec sa coque.', 420.00, NOW() - INTERVAL '1 day'),
-  ('Lot de 12 romans policiers', 'Format poche, bon état général.', 15.00, NOW() - INTERVAL '1 day 6 hours'),
-  ('Table basse en chêne massif', 'Dimensions 110 x 60 cm. Remise en main propre uniquement.', 95.00, NOW() - INTERVAL '2 days'),
-  ('Appareil photo Canon EOS 250D', 'Avec objectif 18-55 mm, sacoche et deux batteries.', 390.00, NOW() - INTERVAL '2 days 8 hours'),
-  ('Casque audio Sony WH-1000XM4', 'Réduction de bruit, housse et câbles fournis.', 150.00, NOW() - INTERVAL '3 days'),
-  ('Chaise de bureau ergonomique', 'Accoudoirs réglables, assise en maille.', 70.00, NOW() - INTERVAL '3 days 12 hours'),
-  ('Console Nintendo Switch', 'Avec deux manettes et la station d''accueil.', 190.00, NOW() - INTERVAL '4 days'),
-  ('Machine à café Delonghi', 'Expresso avec broyeur intégré, détartrée récemment.', 220.00, NOW() - INTERVAL '5 days'),
-  ('Poussette Yoyo', 'Pliage compact, habillage pluie inclus.', 210.00, NOW() - INTERVAL '6 days'),
-  ('Guitare acoustique Yamaha F310', 'Cordes neuves, vendue avec sa housse.', 110.00, NOW() - INTERVAL '7 days'),
-  ('Perceuse visseuse Bosch 18 V', 'Deux batteries, chargeur et coffret.', 85.00, NOW() - INTERVAL '8 days'),
-  ('Étagère en métal noir', 'Cinq niveaux, hauteur 180 cm.', 40.00, NOW() - INTERVAL '10 days'),
-  ('Tondeuse électrique', 'Largeur de coupe 38 cm, bac de 40 litres.', 60.00, NOW() - INTERVAL '12 days'),
-  ('Sac à dos de randonnée 50 L', 'Utilisé une saison, housse de pluie intégrée.', 55.00, NOW() - INTERVAL '15 days'),
-  ('Lampe de bureau articulée', '', 12.50, NOW() - INTERVAL '18 days'),
-  ('Micro-ondes Samsung 23 L', 'Fonction gril, fonctionne parfaitement.', 50.00, NOW() - INTERVAL '21 days');
+-- Jeu de données de test. La catégorie est retrouvée par son nom (NULL : sans catégorie).
+INSERT INTO articles (title, description, price, created_at, category_id)
+SELECT a.title, a.description, a.price, a.created_at, c.id
+FROM (VALUES
+  ('Figurine Boba Fett Kenner 1979', 'Figurine d''origine avec sa cape en tissu, sans boîte. Peinture intacte.', 85.00, NOW() - INTERVAL '1 hour', 'Figurines'),
+  ('Clavier mécanique', 'Clavier en très bon état', 45.00, NOW() - INTERVAL '2 hours', NULL),
+  ('Écran 24 pouces', 'Écran Full HD', 90.00, NOW() - INTERVAL '5 hours', NULL),
+  ('Vélo de route Triban 520', 'Taille M, révisé en juin, pneus neufs.', 340.00, NOW() - INTERVAL '9 hours', NULL),
+  ('Canapé 3 places en tissu gris', 'Déhoussable, très bon état. À venir chercher sur place.', 180.00, NOW() - INTERVAL '14 hours', NULL),
+  ('Game Boy Color violette', 'Fonctionne parfaitement, cache des piles d''origine. Vendue avec Pokémon Jaune.', 75.00, NOW() - INTERVAL '20 hours', 'Jeux vidéo'),
+  ('iPhone 13 128 Go', 'Batterie à 89 %, aucune rayure, vendu avec sa coque.', 420.00, NOW() - INTERVAL '1 day', NULL),
+  ('Carte Pokémon Dracaufeu édition de base', 'Édition de base 1999, bon état, conservée sous protection rigide.', 450.00, NOW() - INTERVAL '1 day 3 hours', 'Cartes'),
+  ('Lot de 12 romans policiers', 'Format poche, bon état général.', 15.00, NOW() - INTERVAL '1 day 6 hours', NULL),
+  ('Table basse en chêne massif', 'Dimensions 110 x 60 cm. Remise en main propre uniquement.', 95.00, NOW() - INTERVAL '2 days', NULL),
+  ('Affiche Retour vers le futur 1985', 'Affiche de cinéma française 120 x 160 cm, pliée d''origine.', 140.00, NOW() - INTERVAL '2 days 4 hours', 'Affiches'),
+  ('Appareil photo Canon EOS 250D', 'Avec objectif 18-55 mm, sacoche et deux batteries.', 390.00, NOW() - INTERVAL '2 days 8 hours', NULL),
+  ('Casque audio Sony WH-1000XM4', 'Réduction de bruit, housse et câbles fournis.', 150.00, NOW() - INTERVAL '3 days', NULL),
+  ('Chaise de bureau ergonomique', 'Accoudoirs réglables, assise en maille.', 70.00, NOW() - INTERVAL '3 days 12 hours', NULL),
+  ('Console Nintendo Switch', 'Avec deux manettes et la station d''accueil.', 190.00, NOW() - INTERVAL '4 days', 'Jeux vidéo'),
+  ('Lot de 50 cartes Magic', 'Cartes communes et peu communes, éditions 2015 à 2020.', 20.00, NOW() - INTERVAL '4 days 6 hours', 'Cartes'),
+  ('Machine à café Delonghi', 'Expresso avec broyeur intégré, détartrée récemment.', 220.00, NOW() - INTERVAL '5 days', NULL),
+  ('Poussette Yoyo', 'Pliage compact, habillage pluie inclus.', 210.00, NOW() - INTERVAL '6 days', NULL),
+  ('Guitare acoustique Yamaha F310', 'Cordes neuves, vendue avec sa housse.', 110.00, NOW() - INTERVAL '7 days', NULL),
+  ('Perceuse visseuse Bosch 18 V', 'Deux batteries, chargeur et coffret.', 85.00, NOW() - INTERVAL '8 days', NULL),
+  ('Figurine Goldorak Shogun Warriors', 'Modèle géant de 60 cm, quelques traces d''usure sur les jambes.', 260.00, NOW() - INTERVAL '9 days', 'Figurines'),
+  ('Étagère en métal noir', 'Cinq niveaux, hauteur 180 cm.', 40.00, NOW() - INTERVAL '10 days', NULL),
+  ('Tondeuse électrique', 'Largeur de coupe 38 cm, bac de 40 litres.', 60.00, NOW() - INTERVAL '12 days', NULL),
+  ('Affiche Super Nintendo publicitaire', 'Affiche promotionnelle de magasin, 1992, 60 x 80 cm.', 65.00, NOW() - INTERVAL '13 days', 'Affiches'),
+  ('Sac à dos de randonnée 50 L', 'Utilisé une saison, housse de pluie intégrée.', 55.00, NOW() - INTERVAL '15 days', NULL),
+  ('Lampe de bureau articulée', '', 12.50, NOW() - INTERVAL '18 days', NULL),
+  ('Micro-ondes Samsung 23 L', 'Fonction gril, fonctionne parfaitement.', 50.00, NOW() - INTERVAL '21 days', NULL)
+) AS a(title, description, price, created_at, category)
+LEFT JOIN categories c ON c.name = a.category;
+
+INSERT INTO article_badges (article_id, badge_id)
+SELECT a.id, b.id
+FROM (VALUES
+  ('Figurine Boba Fett Kenner 1979', 'Rare'),
+  ('Figurine Boba Fett Kenner 1979', 'Vintage'),
+  ('Game Boy Color violette', 'Vintage'),
+  ('Carte Pokémon Dracaufeu édition de base', 'Rare'),
+  ('Carte Pokémon Dracaufeu édition de base', 'Vintage'),
+  ('Affiche Retour vers le futur 1985', 'Vintage'),
+  ('Figurine Goldorak Shogun Warriors', 'Rare'),
+  ('Affiche Super Nintendo publicitaire', 'Vintage')
+) AS t(title, badge)
+JOIN articles a ON a.title = t.title
+JOIN badges b ON b.name = t.badge;

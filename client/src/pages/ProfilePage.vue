@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import ArticleCard from '../components/ArticleCard.vue';
 import Icon from '../components/Icon.vue';
+import PasswordInput from '../components/PasswordInput.vue';
 import { auth, canEdit, changePassword, logout } from '../auth';
 import { formatMonth, formatPrice } from '../format';
 import { articlesVersion, closeForm, deleteArticle, favoritesVersion, openCreate, openEdit, removingId, showToast } from '../ui';
@@ -206,17 +207,15 @@ async function onChangePassword() {
 
         <div class="field">
           <label for="current-password"><Icon name="lock" />Mot de passe actuel</label>
-          <input
+          <PasswordInput
             id="current-password"
             v-model="passwordFields.current"
-            class="input"
-            type="password"
             maxlength="200"
             autocomplete="current-password"
             required
             :aria-invalid="passwordError && !passwordFields.current ? 'true' : 'false'"
             @input="passwordError = ''"
-          >
+          />
         </div>
 
         <div class="field">
@@ -224,17 +223,15 @@ async function onChangePassword() {
             <label for="new-password"><Icon name="key" />Nouveau mot de passe</label>
             <span class="muted small">{{ MIN_PASSWORD }} caractères minimum</span>
           </div>
-          <input
+          <PasswordInput
             id="new-password"
             v-model="passwordFields.next"
-            class="input"
-            type="password"
             maxlength="200"
             autocomplete="new-password"
             required
             :aria-invalid="passwordError && passwordFields.current && passwordFields.next.length < MIN_PASSWORD ? 'true' : 'false'"
             @input="passwordError = ''"
-          >
+          />
         </div>
 
         <p v-if="passwordError" class="alert" role="alert">{{ passwordError }}</p>

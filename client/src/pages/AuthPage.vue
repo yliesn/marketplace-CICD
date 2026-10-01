@@ -4,6 +4,7 @@ import { login, register } from '../auth';
 import { RouterLink, onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import { forgetPendingCreate, resumeAfterLogin, showToast } from '../ui';
 import Icon from '../components/Icon.vue';
+import PasswordInput from '../components/PasswordInput.vue';
 
 const MIN_PASSWORD = 8;
 
@@ -143,18 +144,16 @@ async function onSubmit() {
               <label for="auth-password"><Icon name="lock" />Mot de passe</label>
               <span v-if="isRegister" class="muted small">{{ MIN_PASSWORD }} caractères minimum</span>
             </div>
-            <input
+            <PasswordInput
               id="auth-password"
               v-model="fields.password"
               name="password"
-              class="input"
-              type="password"
               maxlength="200"
               :autocomplete="isRegister ? 'new-password' : 'current-password'"
               required
               :aria-invalid="errors.password ? 'true' : 'false'"
               @input="errors.password = ''"
-            >
+            />
             <p class="field-error">{{ errors.password }}</p>
           </div>
 
